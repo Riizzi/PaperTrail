@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Reference Items
+    match /users/{userId}/items/{itemId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && isValidId(itemId) 
+        && request.resource.data.userId == userId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 500;
+      allow update: if isOwner(userId) 
+        && request.resource.data.userId == userId
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 500));
+      allow delete: if isOwner(userId);
+
+      // Fulltext content subcollection
+      match /content/{contentId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+    }
+
+    // Collections
+    match /users/{userId}/collections/{collectionId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && isValidId(collectionId) 
+        && request.resource.data.userId == userId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 150;
+      allow update: if isOwner(userId) 
+        && request.resource.data.userId == userId
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 150));
+      allow delete: if isOwner(userId);
+    }
+  }
+}

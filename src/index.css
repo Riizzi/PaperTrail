@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'Space Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:root {
+  --color-ledger-bg: #FAF7F2;
+  --color-ledger-card: #FFFDF9;
+  --color-ledger-text: #292524;
+  --color-ledger-muted: #78716C;
+  --color-ledger-border: #E8DFD1;
+  --color-ledger-shadow: #E5DCD0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-ledger-bg);
+  color: var(--color-ledger-text);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Retro Ledger Solid Shadows */
+.ledger-shadow {
+  box-shadow: 2px 2px 0px #E5DCD0;
+}
+
+.ledger-shadow-sm {
+  box-shadow: 1px 1px 0px #E5DCD0;
+}
+
+.ledger-shadow-md {
+  box-shadow: 3px 3px 0px #E5DCD0;
+}
+
+/* Interactive Ledger Button with Pressed Displacement */
+.ledger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  background-color: #FFFDF9;
+  color: #292524;
+  border: 1px solid #E8DFD1;
+  box-shadow: 2px 2px 0px #E5DCD0;
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
+  user-select: none;
+}
+
+.ledger-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px #E5DCD0;
+}
+
+.ledger-btn-primary {
+  background-color: #292524;
+  color: #FAF7F2;
+  border: 1px solid #292524;
+  box-shadow: 2px 2px 0px #E5DCD0;
+}
+
+.ledger-btn-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px #E5DCD0;
+}
+
+/* Folder Tab Tag (curved top, flat bottom, slotted into card) */
+.folder-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #FAF7F2;
+  color: #292524;
+  border: 1px solid #E8DFD1;
+  border-bottom: none;
+  border-top-left-radius: 0.375rem;
+  border-top-right-radius: 0.375rem;
+  box-shadow: 1px -1px 0px #E5DCD0;
+}
+
+/* Folder tab pill/chip */
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  background-color: #FAF7F2;
+  color: #44403C;
+  border: 1px solid #E8DFD1;
+  border-radius: 0.25rem;
+  box-shadow: 1px 1px 0px #E5DCD0;
+}
+
+/* Safe areas */
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
+
+.safe-pt {
+  padding-top: env(safe-area-inset-top, 0.5rem);
+}
