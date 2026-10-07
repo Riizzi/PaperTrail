@@ -140,11 +140,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
         <div className="p-3 bg-[#FAF7F2] border border-[#E8DFD1] space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[#78716C] font-sans">E-mail:</span>
-            <span className="font-semibold text-[#292524]">{user.email || 'Não informado'}</span>
-          </div>
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-[#78716C] font-sans">Identificador:</span>
-            <span className="text-[#78716C] truncate max-w-[190px]">{user.uid}</span>
+            <span className="font-semibold text-[#292524] truncate min-w-0 ml-3">{user.email || 'Não informado'}</span>
           </div>
         </div>
 
@@ -175,7 +171,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
         <div className="flex items-center gap-2">
           <HardDrive size={15} strokeWidth={1.8} className="text-[#292524]" />
           <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-[#292524]">
-            Armazenamento Offline (Firestore)
+            Uso offline
           </h3>
         </div>
         <p className="text-xs font-sans text-[#78716C] leading-relaxed">

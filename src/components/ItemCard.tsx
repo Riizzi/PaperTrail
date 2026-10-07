@@ -111,7 +111,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
           <button
             onClick={onToggleFavorite}
             aria-label={item.isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
-            className="p-1 text-[#78716C] hover:text-[#292524]"
+            className="p-2 -m-1.5 text-[#78716C] hover:text-[#292524]"
           >
             <Star
               size={15}
@@ -166,7 +166,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
         <button
           onClick={handleQuickCopy}
           title="Copiar ABNT"
-          className="ledger-btn px-2 py-1 text-[11px] font-mono flex items-center gap-1 bg-[#FAF7F2] text-[#292524] hover:bg-[#F2ECE1]"
+          className="ledger-btn px-2.5 py-1.5 text-[11px] font-mono flex items-center gap-1 bg-[#FAF7F2] text-[#292524] hover:bg-[#F2ECE1] shrink-0"
         >
           <Copy size={11} strokeWidth={1.8} />
           <span>ABNT</span>

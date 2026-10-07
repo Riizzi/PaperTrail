@@ -7,9 +7,10 @@ export const PWAInstallBanner: React.FC = () => {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const isDismissed = localStorage.getItem('papertrail_pwa_dismissed');
-    if (isDismissed === 'true') {
-      setDismissed(true);
+    try {
+      if (localStorage.getItem('papertrail_pwa_dismissed') === 'true') setDismissed(true);
+    } catch {
+      // navegação privada: só não lembra a escolha
     }
   }, []);
 
@@ -19,13 +20,17 @@ export const PWAInstallBanner: React.FC = () => {
 
   const handleDismiss = () => {
     setDismissed(true);
-    localStorage.setItem('papertrail_pwa_dismissed', 'true');
+    try {
+      localStorage.setItem('papertrail_pwa_dismissed', 'true');
+    } catch {
+      // ignora
+    }
   };
 
   // Android / Chromium prompt
   if (isInstallable) {
     return (
-      <aside aria-label="Instalação do aplicativo" className="mx-4 mb-3 p-3 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow flex items-center justify-between gap-3 text-xs">
+      <aside aria-label="Instalação do aplicativo" className="mb-3 p-3 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow flex items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-[#292524]">
           <Download size={16} strokeWidth={1.75} className="shrink-0 text-[#292524]" />
           <span>Instale o PaperTrail para acesso rápido e offline.</span>
@@ -52,7 +57,7 @@ export const PWAInstallBanner: React.FC = () => {
   // iOS Safari prompt
   if (isIOS) {
     return (
-      <aside aria-label="Instalação no iOS" className="mx-4 mb-3 p-3 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow flex items-start justify-between gap-3 text-xs">
+      <aside aria-label="Instalação no iOS" className="mb-3 p-3 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow flex items-start justify-between gap-3 text-xs">
         <div className="flex items-start gap-2 text-[#292524]">
           <Share size={16} strokeWidth={1.75} className="shrink-0 mt-0.5 text-[#292524]" />
           <div>

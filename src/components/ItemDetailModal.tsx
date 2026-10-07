@@ -29,6 +29,15 @@ import { searchOpenAlexWorks } from '../services/openalex';
 import { saveItemFulltext, deleteItemFulltext } from '../services/firebase';
 import { uploadItemAttachment, deleteItemAttachment, openAttachment, MAX_ATTACHMENT_SIZE } from '../services/attachments';
 
+const TYPE_LABELS: Record<string, string> = {
+  article: 'Artigo',
+  book: 'Livro',
+  chapter: 'Capítulo',
+  thesis: 'Tese/TCC',
+  conference: 'Evento',
+  webpage: 'Página web',
+};
+
 interface ItemDetailModalProps {
   item: ReferenceItem;
   collections: Collection[];
@@ -397,11 +406,12 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8DFD1] bg-[#FAF7F2]">
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#57534E]">
-              {item.type} • {item.year || 's.d.'}
+              {TYPE_LABELS[item.type] || 'Documento'} • {item.year || 'sem ano'}
             </span>
             <button
               onClick={handleToggleFavorite}
-              className="p-1 text-[#78716C] hover:text-[#292524]"
+              aria-label={item.isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+              className="p-2 -m-1 text-[#78716C] hover:text-[#292524]"
             >
               <Star
                 size={16}
@@ -838,7 +848,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                     <div className="relative">
                       <button
                         onClick={() => setShowCopyMenu(!showCopyMenu)}
-                        className="ledger-btn-primary px-3 py-1.5 text-xs font-mono flex items-center gap-1.5"
+                        className="ledger-btn-primary px-3 py-2 text-xs font-mono flex items-center gap-1.5 whitespace-nowrap shrink-0"
                       >
                         <Copy size={13} strokeWidth={2} />
                         <span>Copiar ABNT</span>
@@ -984,13 +994,13 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <BookOpen size={15} strokeWidth={1.8} className="text-[#292524]" />
                     <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-[#292524]">
-                      Textos relacionados (OpenAlex)
+                      Textos relacionados
                     </h2>
                   </div>
                   <button
                     onClick={loadRelatedWorks}
                     disabled={isLoadingRelated}
-                    className="text-xs font-mono text-[#78716C] hover:text-[#292524]"
+                    className="text-xs font-mono text-[#78716C] hover:text-[#292524] px-2 py-1 -mr-2 shrink-0"
                   >
                     {isLoadingRelated ? 'Buscando...' : 'Atualizar'}
                   </button>
@@ -1094,7 +1104,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                     className="ledger-btn px-2.5 py-1 text-xs font-mono flex items-center gap-1 bg-[#FAF7F2]"
                   >
                     <Plus size={12} />
-                    <span>+ Apontamento</span>
+                    <span>Apontamento</span>
                   </button>
                 </div>
 

@@ -226,7 +226,7 @@ export default function App() {
                 PaperTrail
               </span>
               <span className="font-mono text-[9px] uppercase tracking-widest text-[#78716C] block leading-tight">
-                Zotero Ledger
+                Referências
               </span>
             </div>
           </div>

@@ -25,6 +25,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@layer components {
 /* Retro Ledger Solid Shadows */
 .ledger-shadow {
   box-shadow: 2px 2px 0px #E5DCD0;
@@ -102,6 +103,8 @@ body {
   box-shadow: 1px 1px 0px #E5DCD0;
 }
 
+}
+
 /* Safe areas */
 .safe-pb {
   padding-bottom: env(safe-area-inset-bottom, 1rem);
@@ -109,4 +112,13 @@ body {
 
 .safe-pt {
   padding-top: env(safe-area-inset-top, 0.5rem);
+}
+
+/* iOS Safari dá zoom ao focar campos com fonte menor que 16px */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
