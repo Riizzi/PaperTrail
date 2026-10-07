@@ -52,7 +52,10 @@ export async function uploadItemAttachment(
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
     xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
-    xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+    // Chaves novas (sb_publishable_...) não são JWT e vão só no header apikey
+    if (!SUPABASE_ANON_KEY.startsWith('sb_')) {
+      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+    }
     xhr.setRequestHeader('x-upsert', 'false');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
