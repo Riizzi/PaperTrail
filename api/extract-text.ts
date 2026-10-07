@@ -1,4 +1,4 @@
-import { requireUser, sendJson, isOwnPath, downloadAttachment, ai, GEMINI_MODEL } from './_lib/server.js';
+import { requireUser, sendJson, isOwnPath, downloadAttachment, generate, aiErrorMessage, GEMINI_MODEL } from './_lib/server.js';
 import { extractText } from 'unpdf';
 import mammoth from 'mammoth';
 
@@ -33,7 +33,7 @@ export default async function handler(req: any, res: any) {
       // If PDF has no text layer (scanned PDF), transcribe using Gemini
       if (!extractedText || extractedText.length < 50) {
         try {
-          const response = await ai.models.generateContent({
+          const response = await generate({
             model: GEMINI_MODEL,
             contents: [
               {
@@ -85,6 +85,6 @@ export default async function handler(req: any, res: any) {
     console.error('Error in /api/extract-text:', err);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: err.message || 'Erro ao extrair texto do anexo.' }));
+    res.end(JSON.stringify({ error: aiErrorMessage(err, 'Erro ao extrair texto do anexo.') }));
   }
 }

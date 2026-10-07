@@ -1,13 +1,42 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export { Type };
+export { Type, ThinkingLevel };
 
 // Modelo do Gemini usado em todas as rotas
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+/**
+ * Chamada ao Gemini com raciocínio reduzido (respostas bem mais rápidas, importante no
+ * limite de tempo das funções da Vercel). Se o modelo não aceitar o ajuste, repete sem ele.
+ */
+export async function generate(params: GenerateContentParameters, level: ThinkingLevel = ThinkingLevel.LOW) {
+  try {
+    return await ai.models.generateContent({
+      ...params,
+      config: { ...(params.config || {}), thinkingConfig: { thinkingLevel: level } },
+    });
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    if (/thinking/i.test(msg) && /(invalid|not supported|unsupported|unknown)/i.test(msg)) {
+      return await ai.models.generateContent(params);
+    }
+    throw err;
+  }
+}
+
+/** Mensagem de erro curta e em português para falhas do Gemini */
+export function aiErrorMessage(err: any, fallback: string): string {
+  const msg = String(err?.message || '');
+  if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return 'Limite de uso da IA atingido no momento. Tente de novo em alguns minutos.';
+  if (/404|NOT_FOUND|no longer available/i.test(msg)) return 'Modelo de IA indisponível. Atualize a variável GEMINI_MODEL.';
+  if (/API key|PERMISSION_DENIED|401|403/i.test(msg)) return 'Chave do Gemini inválida ou sem permissão.';
+  if (/503|UNAVAILABLE|overloaded/i.test(msg)) return 'A IA está sobrecarregada agora. Tente de novo em instantes.';
+  return msg && msg.length < 200 && !msg.startsWith('{') ? msg : fallback;
+}
 
 // Verificação do token de login do Firebase com as chaves públicas do Google (sem firebase-admin)
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';

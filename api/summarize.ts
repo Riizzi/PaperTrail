@@ -1,6 +1,6 @@
-import { requireUser, ai, GEMINI_MODEL, Type } from './_lib/server.js';
+import { requireUser, generate, aiErrorMessage, GEMINI_MODEL, Type } from './_lib/server.js';
 
-const MAX_CHARS = 500_000;
+const MAX_CHARS = 200_000; // ~50 mil tokens: cobre artigos inteiros e mantém a resposta rápida
 
 export default async function handler(req: any, res: any) {
   const uid = await requireUser(req, res, { countQuota: true });
@@ -65,7 +65,7 @@ Diretrizes estritas:
       required: ['summary', 'keyPoints', 'keywords'],
     };
 
-    const response = await ai.models.generateContent({
+    const response = await generate({
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
@@ -89,6 +89,6 @@ Diretrizes estritas:
     console.error('Error in /api/summarize:', err);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: err.message || 'Erro ao gerar resumo acadêmico' }));
+    res.end(JSON.stringify({ error: aiErrorMessage(err, 'Erro ao gerar resumo acadêmico') }));
   }
 }

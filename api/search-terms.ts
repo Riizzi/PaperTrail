@@ -1,4 +1,4 @@
-import { requireUser, ai, GEMINI_MODEL, Type } from './_lib/server.js';
+import { requireUser, generate, aiErrorMessage, GEMINI_MODEL, Type } from './_lib/server.js';
 
 export default async function handler(req: any, res: any) {
   const uid = await requireUser(req, res, { countQuota: true });
@@ -27,7 +27,7 @@ Evite termos genéricos como "artigo", "pesquisa" ou "estudo". Use termos temát
       required: ['searchTerms'],
     };
 
-    const response = await ai.models.generateContent({
+    const response = await generate({
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
@@ -46,6 +46,6 @@ Evite termos genéricos como "artigo", "pesquisa" ou "estudo". Use termos temát
     console.error('Error in /api/search-terms:', err);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: err.message || 'Erro ao gerar termos de busca' }));
+    res.end(JSON.stringify({ error: aiErrorMessage(err, 'Erro ao gerar termos de busca') }));
   }
 }

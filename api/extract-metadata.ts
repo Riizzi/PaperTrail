@@ -1,4 +1,5 @@
-import { requireUser, ai, GEMINI_MODEL, Type, isOwnPath, downloadAttachment } from './_lib/server.js';
+import { extractText } from 'unpdf';
+import { requireUser, generate, aiErrorMessage, GEMINI_MODEL, Type, isOwnPath, downloadAttachment } from './_lib/server.js';
 
 export default async function handler(req: any, res: any) {
   const uid = await requireUser(req, res, { countQuota: true });
@@ -20,7 +21,23 @@ Tipos de documento válidos: article, book, chapter, thesis, conference, webpage
         res.end(JSON.stringify({ error: 'Acesso negado ao arquivo.' }));
         return;
       }
-      const pdfBase64 = (await downloadAttachment(storagePath)).toString('base64');
+      const pdfBuffer = await downloadAttachment(storagePath);
+
+      // Mais rápido: lê o texto das primeiras páginas (capa, resumo, dados da publicação)
+      let firstPages = '';
+      try {
+        const pdf = await extractText(new Uint8Array(pdfBuffer));
+        const pages = Array.isArray(pdf.text) ? pdf.text : [String(pdf.text || '')];
+        firstPages = pages.slice(0, 3).join('\n\n').trim().slice(0, 20000);
+      } catch (e) {
+        console.warn('unpdf (metadados) falhou:', e);
+      }
+
+      if (firstPages.length >= 300) {
+        contents = [{ text: `${instructions}\n\nTexto das primeiras páginas do PDF:\n${firstPages}` }];
+      } else {
+      // PDF escaneado: envia o arquivo para o Gemini ler
+      const pdfBase64 = pdfBuffer.toString('base64');
       contents = [
         {
           inlineData: {
@@ -30,6 +47,7 @@ Tipos de documento válidos: article, book, chapter, thesis, conference, webpage
         },
         { text: instructions },
       ];
+      }
     } else if (mode === 'url' && url) {
       if (!/^https?:\/\//i.test(String(url)) || /^https?:\/\/(localhost|127\.|10\.|192\.168\.|169\.254\.|\[?::1)/i.test(String(url))) {
         res.statusCode = 400;
@@ -108,7 +126,7 @@ Tipos de documento válidos: article, book, chapter, thesis, conference, webpage
       required: ['type', 'title'],
     };
 
-    const response = await ai.models.generateContent({
+    const response = await generate({
       model: GEMINI_MODEL,
       contents,
       config: {
@@ -131,6 +149,6 @@ Tipos de documento válidos: article, book, chapter, thesis, conference, webpage
     console.error('Error in /api/extract-metadata:', err);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: err.message || 'Erro ao extrair metadados.' }));
+    res.end(JSON.stringify({ error: aiErrorMessage(err, 'Erro ao extrair metadados.') }));
   }
 }

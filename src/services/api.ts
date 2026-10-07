@@ -12,6 +12,11 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
   }
 }
 
+function timeoutAware(status: number, fallback: string): string {
+  if (status === 504) return 'A leitura demorou mais que o limite do servidor. Tente de novo; se persistir, use outro método.';
+  return fallback;
+}
+
 export interface SummaryResult {
   summary: string;
   keyPoints: string[];
@@ -19,7 +24,7 @@ export interface SummaryResult {
   summarySource: 'fulltext' | 'abstract';
 }
 
-const MAX_SUMMARY_CHARS = 500_000;
+const MAX_SUMMARY_CHARS = 200_000;
 
 export async function requestSummary(item: Partial<ReferenceItem>, fulltext?: string): Promise<SummaryResult> {
   // Sem texto informado: usa o texto completo já extraído do anexo (se houver)
@@ -46,7 +51,7 @@ export async function requestSummary(item: Partial<ReferenceItem>, fulltext?: st
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ao gerar resumo (${res.status})`);
+    throw new Error(errorData.error || timeoutAware(res.status, `Erro ao gerar resumo (${res.status})`));
   }
 
   return await res.json();
@@ -73,7 +78,7 @@ export async function requestExtractText(storagePath: string): Promise<{
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ao extrair texto do anexo (${res.status})`);
+    throw new Error(errorData.error || timeoutAware(res.status, `Erro ao extrair texto do anexo (${res.status})`));
   }
 
   return await res.json();
@@ -96,7 +101,7 @@ export async function requestSearchTerms(item: Partial<ReferenceItem>): Promise<
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ao gerar termos de busca (${res.status})`);
+    throw new Error(errorData.error || timeoutAware(res.status, `Erro ao gerar termos de busca (${res.status})`));
   }
 
   const data = await res.json();
@@ -119,7 +124,7 @@ export async function requestMetadataFromUrl(url: string): Promise<Partial<Refer
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ao extrair metadados da URL (${res.status})`);
+    throw new Error(errorData.error || timeoutAware(res.status, `Erro ao extrair metadados da URL (${res.status})`));
   }
 
   return await res.json();
@@ -141,7 +146,7 @@ export async function requestMetadataFromPdf(storagePath: string): Promise<Parti
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro ao extrair metadados do PDF (${res.status})`);
+    throw new Error(errorData.error || timeoutAware(res.status, `Erro ao extrair metadados do PDF (${res.status})`));
   }
 
   return await res.json();
