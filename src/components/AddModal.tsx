@@ -396,7 +396,7 @@ export const AddModal: React.FC<AddModalProps> = ({
                     autoFocus
                   />
                   <p className="text-[11px] text-[#78716C] font-sans">
-                    Funciona com páginas de artigos e links diretos para PDF (o arquivo é anexado). Confira tudo na revisão.
+                    Páginas de artigos, blogs e links diretos para PDF (o arquivo é anexado). A IA preenche os dados; confira na revisão.
                   </p>
                 </div>
               )}
@@ -446,7 +446,7 @@ export const AddModal: React.FC<AddModalProps> = ({
                   {isLoading ? (
                     <>
                       <Loader2 size={13} className="animate-spin" />
-                      <span>Processando metadados...</span>
+                      <span>{method === "pdf" || method === "url" ? "Lendo e preenchendo (até 1 min)..." : "Buscando dados..."}</span>
                     </>
                   ) : (
                     <span>Avançar para revisão</span>

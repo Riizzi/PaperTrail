@@ -18,7 +18,7 @@ export function findDoi(text: string): string | null {
   return m[1].replace(/[).,;:]+$/, '');
 }
 
-function stripTags(s: string): string {
+export function stripTags(s: string): string {
   return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -285,6 +285,7 @@ export async function wordpressLookup(target: string): Promise<Meta | null> {
         year: String(post.date || '').slice(0, 4),
         abstract: decodeEntities(stripTags(post.excerpt?.rendered || '')),
         url: post.link || target,
+        contentText: decodeEntities(stripTags(post.content?.rendered || '')).slice(0, 15000),
       };
     }
   }

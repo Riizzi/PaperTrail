@@ -21,8 +21,8 @@ export async function generate(
   level: ThinkingLevel = ThinkingLevel.LOW,
   opts: { deadlineMs?: number } = {}
 ) {
-  // Prazo total (inclui novas tentativas) para nunca estourar os 60 s da Vercel
-  const deadline = Date.now() + (opts.deadlineMs ?? 45_000);
+  // Prazo total (inclui novas tentativas) para nunca estourar o limite da função na Vercel (120 s)
+  const deadline = Date.now() + (opts.deadlineMs ?? 90_000);
   const waits = [1500, 4000];
   for (let attempt = 0; ; attempt++) {
     const remaining = deadline - Date.now();
