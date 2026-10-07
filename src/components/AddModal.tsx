@@ -375,7 +375,7 @@ export const AddModal: React.FC<AddModalProps> = ({
                     autoFocus
                   />
                   <p className="text-[11px] text-[#78716C] font-sans">
-                    O Gemini analisará a página e extrairá os metadados bibliográficos.
+                    Lê os dados da página (DOI e informações de citação). Confira tudo na revisão.
                   </p>
                 </div>
               )}
