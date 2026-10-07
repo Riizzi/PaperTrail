@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export { Type };
 
 // Modelo do Gemini usado em todas as rotas
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
