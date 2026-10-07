@@ -99,6 +99,11 @@ export const AddModal: React.FC<AddModalProps> = ({
         };
       }
 
+      const notice = (extracted as any).notice;
+      if (notice) onToast(notice);
+      delete (extracted as any).notice;
+      delete (extracted as any).source;
+
       // If URL is present, record access date at moment of addition
       const effectiveUrl = extracted.url || (method === 'url' ? urlInput.trim() : undefined);
       const accessDate = effectiveUrl ? (extracted.accessDate || formatMonthAbbr()) : undefined;

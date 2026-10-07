@@ -13,7 +13,24 @@ export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
  * Chamada ao Gemini com raciocínio reduzido (respostas bem mais rápidas, importante no
  * limite de tempo das funções da Vercel). Se o modelo não aceitar o ajuste, repete sem ele.
  */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Repete chamadas que falharam por sobrecarga momentânea (503/429), com espera crescente */
 export async function generate(params: GenerateContentParameters, level: ThinkingLevel = ThinkingLevel.LOW) {
+  const waits = [1500, 4000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await generateOnce(params, level);
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      const transient = /503|UNAVAILABLE|overloaded|429|RESOURCE_EXHAUSTED/i.test(msg);
+      if (!transient || attempt >= waits.length) throw err;
+      await sleep(waits[attempt]);
+    }
+  }
+}
+
+async function generateOnce(params: GenerateContentParameters, level: ThinkingLevel) {
   try {
     return await ai.models.generateContent({
       ...params,
