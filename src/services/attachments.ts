@@ -18,8 +18,17 @@ async function storageApi<T = any>(body: Record<string, unknown>): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
     body: JSON.stringify(body),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Erro no armazenamento (${res.status})`);
+  const raw = await res.text();
+  let data: any = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    // resposta que não é JSON (ex.: falha da própria Vercel)
+  }
+  if (!res.ok) {
+    const detail = data.error || raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+    throw new Error(`Erro no armazenamento (${res.status})${detail ? `: ${detail}` : ''}`);
+  }
   return data as T;
 }
 

@@ -9,6 +9,15 @@ import { requireUser, sendJson, isOwnPath, getSupabaseAdmin, ATTACHMENTS_BUCKET 
  * - delete-all:   {}                    -> apaga todos os arquivos do usuário (excluir conta)
  */
 export default async function handler(req: any, res: any) {
+  try {
+    await run(req, res);
+  } catch (err: any) {
+    console.error('Unhandled error in /api/storage:', err);
+    if (!res.headersSent) sendJson(res, 500, { error: err?.message || 'Erro inesperado no servidor.' });
+  }
+}
+
+async function run(req: any, res: any) {
   const uid = await requireUser(req, res);
   if (!uid) return;
 
@@ -65,7 +74,8 @@ export default async function handler(req: any, res: any) {
 
     return sendJson(res, 400, { error: 'Ação inválida.' });
   } catch (err: any) {
-    console.error('Error in /api/storage:', err);
-    return sendJson(res, 500, { error: err?.message || 'Erro no armazenamento de anexos.' });
+    console.error('Error in /api/storage:', action, err);
+    const msg = err?.message || err?.error || (typeof err === 'string' ? err : '') || 'Erro no armazenamento de anexos.';
+    return sendJson(res, 500, { error: String(msg) });
   }
 }
