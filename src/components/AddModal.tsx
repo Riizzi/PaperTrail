@@ -53,6 +53,7 @@ export const AddModal: React.FC<AddModalProps> = ({
   const [pdfStoragePath, setPdfStoragePath] = useState<string | null>(null);
   const [pdfUploadedFile, setPdfUploadedFile] = useState<File | null>(null);
   // PDF baixado de um link (o servidor já guardou como anexo)
+  const [lookupInfo, setLookupInfo] = useState<{ notice?: string; source?: string; trace?: string[] } | null>(null);
   const [linkAttachment, setLinkAttachment] = useState<{ storagePath: string; name: string; size: number; mimeType: string } | null>(null);
 
   // Review & form state
@@ -114,9 +115,10 @@ export const AddModal: React.FC<AddModalProps> = ({
       }
 
       const notice = (extracted as any).notice;
-      if (notice) onToast(notice);
+      setLookupInfo({ notice, source: (extracted as any).source, trace: (extracted as any).trace });
       delete (extracted as any).notice;
       delete (extracted as any).source;
+      delete (extracted as any).trace;
 
       // If URL is present, record access date at moment of addition
       const effectiveUrl = extracted.url || (method === 'url' ? urlInput.trim() : undefined);
@@ -458,9 +460,30 @@ export const AddModal: React.FC<AddModalProps> = ({
         ) : (
           /* Step 2: Mandatory Review Screen */
           <form onSubmit={handleSaveItem} className="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
-            <div className="p-2.5 bg-[#FAF7F2] border border-[#E8DFD1] text-[11px] font-sans text-[#57534E]">
-              Revise e corrija os campos antes de confirmar o salvamento na biblioteca.
+            <div className="p-2.5 bg-[#FAF7F2] border border-[#E8DFD1] text-[11px] font-sans text-[#57534E] space-y-1">
+              <p>Revise e corrija os campos antes de confirmar o salvamento na biblioteca.</p>
+              {lookupInfo?.source && (
+                <p className="font-mono text-[10px] text-[#78716C]">
+                  Fonte dos dados:{' '}
+                  {({ doi: 'CrossRef (DOI)', ai: 'IA (Gemini)', tags: 'dados da página', pdf: 'leitura do PDF', wordpress: 'API do site', blocked: 'site bloqueado' } as Record<string, string>)[lookupInfo.source] || lookupInfo.source}
+                </p>
+              )}
             </div>
+            {lookupInfo?.notice && (
+              <div className="p-2.5 bg-[#FEF3C7] border border-[#E8D9A0] text-[11px] font-sans text-[#78350F]">
+                {lookupInfo.notice}
+              </div>
+            )}
+            {lookupInfo?.trace && lookupInfo.trace.length > 0 && (
+              <details className="text-[10px] font-mono text-[#78716C]">
+                <summary className="cursor-pointer select-none">Detalhes da leitura</summary>
+                <ol className="mt-1 space-y-0.5 list-decimal pl-4 break-words">
+                  {lookupInfo.trace.map((t, i) => (
+                    <li key={i}>{t}</li>
+                  ))}
+                </ol>
+              </details>
+            )}
 
             <div>
               <label className="block text-[#57534E] mb-1 font-mono uppercase text-[11px] font-bold">

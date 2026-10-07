@@ -9,6 +9,7 @@ import {
   downloadAttachment,
   getSupabaseAdmin,
   ATTACHMENTS_BUCKET,
+  type Trace,
 } from './_lib/server.js';
 import {
   findDoi,
@@ -81,7 +82,7 @@ function hintsText(hints: Meta): string {
 }
 
 /** IA lendo um texto que já temos */
-async function aiFromText(sourceLabel: string, text: string, hints: Meta): Promise<Meta> {
+async function aiFromText(sourceLabel: string, text: string, hints: Meta, trace: Trace): Promise<Meta> {
   const response = await generate(
     {
       model: GEMINI_MODEL,
@@ -89,13 +90,13 @@ async function aiFromText(sourceLabel: string, text: string, hints: Meta): Promi
       config: { responseMimeType: 'application/json', responseSchema: metadataSchema },
     },
     undefined,
-    { deadlineMs: 80_000 }
+    { deadlineMs: 80_000, trace }
   );
   return JSON.parse(response.text?.trim() || '{}');
 }
 
 /** IA lendo o PDF diretamente (escaneado, sem camada de texto) */
-async function aiFromPdf(buffer: Buffer, hints: Meta): Promise<Meta> {
+async function aiFromPdf(buffer: Buffer, hints: Meta, trace: Trace): Promise<Meta> {
   const response = await generate(
     {
       model: GEMINI_MODEL,
@@ -106,13 +107,13 @@ async function aiFromPdf(buffer: Buffer, hints: Meta): Promise<Meta> {
       config: { responseMimeType: 'application/json', responseSchema: metadataSchema },
     },
     undefined,
-    { deadlineMs: 80_000 }
+    { deadlineMs: 80_000, trace }
   );
   return JSON.parse(response.text?.trim() || '{}');
 }
 
 /** IA abrindo a URL pelos servidores do Google (para sites que bloqueiam o nosso acesso) */
-async function aiFromUrl(url: string, hints: Meta): Promise<Meta> {
+async function aiFromUrl(url: string, hints: Meta, trace: Trace): Promise<Meta> {
   const response = await generate(
     {
       model: GEMINI_MODEL,
@@ -124,7 +125,7 @@ async function aiFromUrl(url: string, hints: Meta): Promise<Meta> {
       config: { tools: [{ urlContext: {} }, { googleSearch: {} }] },
     },
     undefined,
-    { deadlineMs: 80_000 }
+    { deadlineMs: 80_000, trace }
   );
   const raw = response.text || '';
   const json = raw.match(/\{[\s\S]*\}/)?.[0];
@@ -155,11 +156,13 @@ const missingNotice = (m: Meta) => {
 };
 
 /** PDF já baixado */
-async function analyzePdf(buffer: Buffer): Promise<Meta> {
+async function analyzePdf(buffer: Buffer, trace: Trace): Promise<Meta> {
   const { firstPagesText, guess } = await readPdf(buffer).catch(() => ({ firstPagesText: '', guess: {} as Meta }));
 
+  trace.push(`PDF: ${firstPagesText.length} caracteres lidos${guess.title ? ', título encontrado' : ''}`);
   const doi = findDoi(firstPagesText);
   const cr = doi ? await crossrefLookup(doi) : null;
+  if (doi) trace.push(`DOI ${doi}: ${cr ? (isComplete(cr) ? 'CrossRef completo' : 'CrossRef parcial') : 'não encontrado no CrossRef'}`);
   if (cr && isComplete(cr)) {
     return { ...mergeMeta(clean(cr), { abstract: guess.abstract }), source: 'doi' };
   }
@@ -168,8 +171,8 @@ async function analyzePdf(buffer: Buffer): Promise<Meta> {
   try {
     const ai = clean(
       firstPagesText.length >= 300
-        ? await aiFromText('Texto das primeiras páginas do PDF', firstPagesText, hints)
-        : await aiFromPdf(buffer, hints)
+        ? await aiFromText('Texto das primeiras páginas do PDF', firstPagesText, hints, trace)
+        : await aiFromPdf(buffer, hints, trace)
     );
     // Dados do CrossRef (quando houver) valem mais que a IA; a IA completa o resto
     const merged = cr ? mergeMeta(clean(cr), mergeMeta(ai, hints)) : mergeMeta(ai, hints);
@@ -209,12 +212,15 @@ export default async function handler(req: any, res: any) {
   if (!uid) return;
 
   const { mode, url, storagePath, itemId } = req.body || {};
+  const trace: Trace = [];
+  // Toda resposta leva o registro das etapas (mostrado na revisão)
+  const reply = (status: number, data: Meta) => sendJson(res, status, { ...data, trace });
 
   try {
     if (mode === 'pdf') {
       if (!isOwnPath(uid, storagePath)) return sendJson(res, 403, { error: 'Acesso negado ao arquivo.' });
       const buffer = await downloadAttachment(storagePath);
-      return sendJson(res, 200, await analyzePdf(buffer));
+      return reply(200, await analyzePdf(buffer, trace));
     }
 
     if (mode !== 'url') return sendJson(res, 400, { error: 'Nenhum conteúdo fornecido para extração.' });
@@ -226,19 +232,21 @@ export default async function handler(req: any, res: any) {
     const doiInUrl = findDoi(decodeURIComponent(target));
     if (doiInUrl) {
       const cr = await crossrefLookup(doiInUrl);
-      if (cr && isComplete(cr)) return sendJson(res, 200, { ...clean(cr), url: target, source: 'doi' });
+      trace.push(`DOI na URL: ${cr ? 'CrossRef ok' : 'não encontrado'}`);
+      if (cr && isComplete(cr)) return reply(200, { ...clean(cr), url: target, source: 'doi' });
     }
 
     let page: Awaited<ReturnType<typeof fetchTarget>> | null = null;
     try {
       page = await fetchTarget(target);
-    } catch {
-      // site inacessível pelo nosso servidor
+      trace.push(`Página: HTTP ${page.status} ${page.contentType.split(';')[0]}`);
+    } catch (e) {
+      trace.push(`Página inacessível: ${(e as Error)?.message || 'erro'}`);
     }
 
     // Link direto para PDF: lê como PDF e guarda como anexo
     if (page && (/application\/pdf/i.test(page.contentType) || page.bytes.subarray(0, 5).toString() === '%PDF-')) {
-      const meta = await analyzePdf(page.bytes);
+      const meta = await analyzePdf(page.bytes, trace);
       let attachment: Meta | undefined;
       if (typeof itemId === 'string' && /^[\w-]{1,128}$/.test(itemId) && page.bytes.length <= 20 * 1024 * 1024) {
         try {
@@ -251,11 +259,12 @@ export default async function handler(req: any, res: any) {
           console.warn('Não foi possível guardar o PDF do link:', e);
         }
       }
-      return sendJson(res, 200, { ...meta, url: target, attachment });
+      return reply(200, { ...meta, url: target, attachment });
     }
 
     const html = page ? page.bytes.toString('utf-8') : '';
     const blocked = !page || isBotChallenge(page.status, html) || page.status >= 400;
+    if (blocked && page) trace.push('Site bloqueou a leitura automática');
     const tags: Meta = !blocked ? metaFromHtml(html, target) : { url: target, type: 'webpage' };
     const { hasCitationTags, ...tagMeta } = tags;
 
@@ -263,15 +272,16 @@ export default async function handler(req: any, res: any) {
     if (tagMeta.doi) {
       const cr = await crossrefLookup(tagMeta.doi);
       if (cr && isComplete(cr)) {
-        return sendJson(res, 200, { ...mergeMeta(clean(cr), { abstract: tagMeta.abstract }), url: target, source: 'doi' });
+        return reply(200, { ...mergeMeta(clean(cr), { abstract: tagMeta.abstract }), url: target, source: 'doi' });
       }
     }
 
     // Página de periódico com metatags completas
-    if (hasCitationTags && isComplete(tagMeta)) return sendJson(res, 200, { ...clean(tagMeta), source: 'tags' });
+    if (hasCitationTags && isComplete(tagMeta)) return reply(200, { ...clean(tagMeta), source: 'tags' });
 
     // Conteúdo para a IA: texto da página, ou API do WordPress, ou a URL aberta pelo Google
     const wp = blocked ? await wordpressLookup(target) : null;
+    if (blocked) trace.push(wp ? 'WordPress: post encontrado' : 'WordPress: indisponível');
     const { contentText: wpText, ...wpMeta } = wp || ({} as Meta);
     const hints = clean(mergeMeta(tagMeta, wpMeta));
 
@@ -285,18 +295,18 @@ export default async function handler(req: any, res: any) {
           .replace(/<[^>]+>/g, ' ')
           .replace(/\s+/g, ' ')
           .slice(0, 15000);
-        ai = await aiFromText(`Página ${target}`, bodyText, hints);
+        ai = await aiFromText(`Página ${target}`, bodyText, hints, trace);
       } else if (wpText) {
-        ai = await aiFromText(`Post ${target} (título: ${wpMeta.title || ''})`, stripTags(wpText), hints);
+        ai = await aiFromText(`Post ${target} (título: ${wpMeta.title || ''})`, stripTags(wpText), hints, trace);
       } else {
-        ai = await aiFromUrl(target, hints);
+        ai = await aiFromUrl(target, hints, trace);
       }
       const aiClean = clean(ai);
       const merged = hasCitationTags ? mergeMeta(clean(tagMeta), aiClean) : mergeMeta(aiClean, hints);
-      return sendJson(res, 200, { ...merged, url: target, source: 'ai', notice: missingNotice(merged) });
+      return reply(200, { ...merged, url: target, source: 'ai', notice: missingNotice(merged) });
     } catch (err) {
       console.warn('IA indisponível (URL):', (err as Error)?.message);
-      return sendJson(res, 200, {
+      return reply(200, {
         ...hints,
         type: hints.type || 'webpage',
         url: target,

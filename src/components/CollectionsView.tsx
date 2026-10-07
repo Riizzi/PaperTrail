@@ -10,7 +10,7 @@ import {
   ArrowLeft,
   BookOpen,
 } from 'lucide-react';
-import { formatCollectionABNT, copyABNTToClipboard, exportToBibTeX } from '../services/abnt';
+import { formatCollectionABNT, copyABNTToClipboard, exportToBibTeX, getMissingABNTFields } from '../services/abnt';
 
 interface CollectionsViewProps {
   userId: string;
@@ -67,15 +67,20 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
     }
   };
 
-  const handleCopyAllABNT = async () => {
-    if (collectionItems.length === 0) {
+  const copyCollectionABNT = async (list: ReferenceItem[]) => {
+    if (list.length === 0) {
       onToast('Nenhum texto nesta coleção para copiar.');
       return;
     }
-    const { html, plain } = formatCollectionABNT(collectionItems);
-    await copyABNTToClipboard(html, plain);
-    onToast('Referências da coleção copiadas em ABNT');
+    const { html, plain } = formatCollectionABNT(list);
+    const ok = await copyABNTToClipboard(html, plain);
+    onToast(ok ? `${list.length} ${list.length === 1 ? 'referência copiada' : 'referências copiadas'} em ABNT` : 'Não foi possível copiar');
   };
+
+  const handleCopyAllABNT = () => copyCollectionABNT(collectionItems);
+
+  const collectionABNT = formatCollectionABNT(collectionItems);
+  const incompleteCount = collectionItems.filter((it) => getMissingABNTFields(it).length > 0).length;
 
   const handleExportBibTeX = () => {
     if (collectionItems.length === 0) {
@@ -151,7 +156,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 className="ledger-btn-primary px-3 py-1.5 text-xs font-mono flex items-center gap-1.5"
               >
                 <Copy size={13} strokeWidth={2} />
-                <span>Copiar referências da coleção</span>
+                <span>Copiar referências</span>
               </button>
 
               <button
@@ -163,6 +168,34 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Lista de referências pronta (ABNT, ordem alfabética) */}
+          {collectionItems.length > 0 && (
+            <section className="bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2 border-b border-[#F0E9DF] pb-2">
+                <div>
+                  <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-[#292524]">Referências</h3>
+                  <p className="font-mono text-[10px] text-[#78716C] mt-0.5">ABNT NBR 6023:2018 · ordem alfabética</p>
+                </div>
+                <button
+                  onClick={handleCopyAllABNT}
+                  className="ledger-btn-primary px-3 py-2 text-xs font-mono flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <Copy size={13} strokeWidth={2} />
+                  <span>Copiar lista</span>
+                </button>
+              </div>
+              {incompleteCount > 0 && (
+                <p className="p-2 bg-[#FEF3C7] border border-[#E8D9A0] text-[11px] font-sans text-[#78350F]">
+                  {incompleteCount === 1 ? '1 texto está' : `${incompleteCount} textos estão`} com dados faltando para a ABNT. Abra o texto e complete em Editar.
+                </p>
+              )}
+              <div
+                className="font-mono text-[11px] leading-relaxed text-[#292524] space-y-2 [&_p]:m-0 max-h-96 overflow-y-auto pr-1"
+                dangerouslySetInnerHTML={{ __html: collectionABNT.html }}
+              />
+            </section>
+          )}
 
           {/* Collection Items */}
           {collectionItems.length === 0 ? (
@@ -295,7 +328,21 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
                     <div className="mt-3 pt-2 border-t border-[#F0E9DF] flex items-center justify-between text-xs font-mono text-[#78716C]">
                       <span>{count} {count === 1 ? 'texto' : 'textos'}</span>
-                      <span className="text-[11px] hover:underline">Abrir →</span>
+                      <div className="flex items-center gap-2">
+                        {count > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyCollectionABNT(items.filter((it) => it.collectionIds?.includes(col.id)));
+                            }}
+                            className="ledger-btn px-2.5 py-1.5 text-[11px] font-mono flex items-center gap-1 bg-[#FAF7F2] text-[#292524]"
+                          >
+                            <Copy size={11} strokeWidth={1.8} />
+                            <span>ABNT</span>
+                          </button>
+                        )}
+                        <span className="text-[11px] hover:underline">Abrir →</span>
+                      </div>
                     </div>
                   </div>
                 );
