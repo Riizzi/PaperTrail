@@ -1,4 +1,4 @@
-import { getDocumentProxy, extractText, extractTextItems, getMeta } from 'unpdf';
+import { getDocumentProxy, getMeta } from 'unpdf';
 
 /**
  * Extração de metadados SEM IA:
@@ -125,29 +125,40 @@ export function metaFromHtml(html: string, url: string): Meta {
 export async function readPdf(buffer: Buffer): Promise<{ firstPagesText: string; guess: Meta }> {
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
 
-  let firstPagesText = '';
-  try {
-    const { text } = await extractText(pdf);
-    firstPagesText = (Array.isArray(text) ? text : [text]).slice(0, 3).join('\n\n').trim().slice(0, 20000);
-  } catch {
-    // segue sem texto
-  }
-
+  // Só as 3 primeiras páginas: rápido mesmo em livros grandes
+  const pageTexts: string[] = [];
   let title = '';
-  try {
-    const { items } = await extractTextItems(pdf);
-    const page1 = (items[0] || []).filter((i) => i.str.trim().length > 1);
-    if (page1.length) {
-      const maxSize = Math.max(...page1.map((i) => i.fontSize || 0));
-      const big = page1
-        .filter((i) => (i.fontSize || 0) >= maxSize * 0.92)
-        .sort((a, b) => b.y - a.y || a.x - b.x);
-      title = big.map((i) => i.str.trim()).join(' ').replace(/\s+/g, ' ').trim();
-      if (title.length > 300 || title.length < 4) title = '';
+  const pagesToRead = Math.min(3, pdf.numPages || 0);
+  for (let p = 1; p <= pagesToRead; p++) {
+    try {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const items = (content.items as any[])
+        .filter((i) => typeof i.str === 'string')
+        .map((i) => ({
+          str: i.str as string,
+          y: i.transform?.[5] ?? 0,
+          x: i.transform?.[4] ?? 0,
+          size: Math.hypot(i.transform?.[0] ?? 0, i.transform?.[1] ?? 0),
+          eol: Boolean(i.hasEOL),
+        }));
+      pageTexts.push(items.map((i) => i.str + (i.eol ? '\n' : ' ')).join('').replace(/[ \t]+\n/g, '\n'));
+
+      if (p === 1) {
+        const visible = items.filter((i) => i.str.trim().length > 1);
+        if (visible.length) {
+          const maxSize = Math.max(...visible.map((i) => i.size));
+          // Só o tamanho de letra máximo (tolerância pequena): no corpo do texto a diferença é de ~1pt
+          const big = visible.filter((i) => i.size >= maxSize - 0.3).sort((a, b) => b.y - a.y || a.x - b.x);
+          title = big.map((i) => i.str.trim()).join(' ').replace(/\s+/g, ' ').trim();
+          if (title.length > 300 || title.length < 4) title = '';
+        }
+      }
+    } catch {
+      // página ilegível: segue
     }
-  } catch {
-    // segue sem título
   }
+  const firstPagesText = pageTexts.join('\n\n').trim().slice(0, 20000);
 
   let info: Record<string, any> = {};
   try {
@@ -159,6 +170,23 @@ export async function readPdf(buffer: Buffer): Promise<{ firstPagesText: string;
   const infoTitle = typeof info.Title === 'string' ? info.Title.trim() : '';
   const infoAuthor = typeof info.Author === 'string' ? info.Author.trim() : '';
   const usefulInfoTitle = infoTitle && !/^(microsoft|untitled|sem título|documento|document\d*)\b|\.(docx?|pdf)$/i.test(infoTitle);
+
+  // Autores: linhas antes do RESUMO/ABSTRACT com "Nome – e-mail" ou nome seguido de número de nota
+  const head = (pageTexts[0] || '').split(/\n\s*(?:RESUMO|Resumo|ABSTRACT|Abstract)\b/)[0];
+  const authorNames: string[] = [];
+  for (const rawLine of head.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const withEmail = line.match(/^(.{5,80}?)\s*[–—\-,(]\s*\S+@\S+/);
+    const candidate = (withEmail ? withEmail[1] : line).replace(/[\d*¹²³⁴⁵⁶⁷⁸⁹]+$/, '').trim();
+    const words = candidate.split(/\s+/);
+    const looksLikeName =
+      words.length >= 2 && words.length <= 8 &&
+      words.every((w) => /^[A-ZÀ-Ý][a-zà-ÿ'’.-]*$|^(da|de|do|das|dos|e)$/i.test(w) && !/^[A-ZÀ-Ý]{4,}$/.test(w)) &&
+      /^[A-ZÀ-Ý]/.test(words[0]);
+    if ((withEmail || /\d\s*$/.test(line)) && looksLikeName) authorNames.push(candidate);
+  }
+  const textAuthors = authorNames.slice(0, 10).join('; ');
 
   const currentYear = new Date().getFullYear();
   const years = (firstPagesText.slice(0, 6000).match(/\b(19[5-9]\d|20\d{2})\b/g) || [])
@@ -173,8 +201,8 @@ export async function readPdf(buffer: Buffer): Promise<{ firstPagesText: string;
     firstPagesText,
     guess: {
       type: 'article',
-      title: title || (usefulInfoTitle ? infoTitle : ''),
-      authors: infoAuthor,
+      title: toSentenceCase(title) || (usefulInfoTitle ? infoTitle : ''),
+      authors: textAuthors || infoAuthor,
       year: years.length ? String(Math.max(...years)) : '',
       abstract: abstractMatch ? abstractMatch[1].replace(/\s+/g, ' ').trim() : '',
     },
@@ -188,4 +216,17 @@ export function mergeMeta(primary: Meta, fallback: Meta): Meta {
     if (v !== '' && v !== undefined && v !== null) out[k] = v;
   }
   return out;
+}
+
+/** Título todo em MAIÚSCULAS vira "Frase normal", mantendo siglas com números (COVID-19) */
+function toSentenceCase(t: string): string {
+  if (!t) return t;
+  const letters = t.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!letters || letters !== letters.toUpperCase()) return t;
+  const lower = t
+    .split(/\s+/)
+    .map((w) => (/\d/.test(w) && /[A-ZÀ-Ý]/.test(w) ? w : w.toLowerCase()))
+    .join(' ')
+    .replace(/\.$/, '');
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }

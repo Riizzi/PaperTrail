@@ -39,11 +39,16 @@ const metadataSchema = {
 };
 
 async function askAi(contents: any[]): Promise<Meta> {
-  const response = await generate({
-    model: GEMINI_MODEL,
-    contents,
-    config: { responseMimeType: 'application/json', responseSchema: metadataSchema },
-  });
+  // Prazo curto: se a IA demorar, o app segue com a leitura direta
+  const response = await generate(
+    {
+      model: GEMINI_MODEL,
+      contents,
+      config: { responseMimeType: 'application/json', responseSchema: metadataSchema },
+    },
+    undefined,
+    { deadlineMs: 20_000 }
+  );
   return JSON.parse(response.text?.trim() || '{}');
 }
 
@@ -73,7 +78,17 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      // 2. IA com o texto das primeiras páginas (ou o PDF, se for escaneado)
+      // 2. Leitura direta achou o título: não precisa de IA
+      if (guess.title) {
+        return sendJson(res, 200, {
+          ...guess,
+          doi: doi || '',
+          source: 'pdf',
+          notice: 'Dados lidos direto do PDF. Confira autores, periódico e páginas antes de salvar.',
+        });
+      }
+
+      // 3. IA com o texto das primeiras páginas (ou o PDF, se for escaneado), com prazo curto
       try {
         const contents =
           firstPagesText.length >= 300
@@ -85,7 +100,7 @@ export default async function handler(req: any, res: any) {
         console.warn('IA indisponível para metadados, usando leitura direta:', (aiErr as Error)?.message);
       }
 
-      // 3. Leitura direta do PDF (sem IA)
+      // 4. Sem IA: devolve o que foi lido para completar na revisão
       return sendJson(res, 200, {
         ...guess,
         doi: doi || '',

@@ -16,16 +16,29 @@ export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Repete chamadas que falharam por sobrecarga momentânea (503/429), com espera crescente */
-export async function generate(params: GenerateContentParameters, level: ThinkingLevel = ThinkingLevel.LOW) {
+export async function generate(
+  params: GenerateContentParameters,
+  level: ThinkingLevel = ThinkingLevel.LOW,
+  opts: { deadlineMs?: number } = {}
+) {
+  // Prazo total (inclui novas tentativas) para nunca estourar os 60 s da Vercel
+  const deadline = Date.now() + (opts.deadlineMs ?? 45_000);
   const waits = [1500, 4000];
   for (let attempt = 0; ; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining < 3000) throw new Error('DEADLINE: a IA demorou demais para responder.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
     try {
-      return await generateOnce(params, level);
+      return await generateOnce({ ...params, config: { ...(params.config || {}), abortSignal: controller.signal } }, level);
     } catch (err: any) {
+      if (controller.signal.aborted) throw new Error('DEADLINE: a IA demorou demais para responder.');
       const msg = String(err?.message || '');
       const transient = /503|UNAVAILABLE|overloaded|429|RESOURCE_EXHAUSTED/i.test(msg);
-      if (!transient || attempt >= waits.length) throw err;
+      if (!transient || attempt >= waits.length || Date.now() + waits[attempt] > deadline) throw err;
       await sleep(waits[attempt]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
@@ -52,6 +65,7 @@ export function aiErrorMessage(err: any, fallback: string): string {
   if (/404|NOT_FOUND|no longer available/i.test(msg)) return 'Modelo de IA indisponível. Atualize a variável GEMINI_MODEL.';
   if (/API key|PERMISSION_DENIED|401|403/i.test(msg)) return 'Chave do Gemini inválida ou sem permissão.';
   if (/503|UNAVAILABLE|overloaded/i.test(msg)) return 'A IA está sobrecarregada agora. Tente de novo em instantes.';
+  if (/DEADLINE/.test(msg)) return 'A IA demorou demais para responder. Tente de novo em instantes.';
   return msg && msg.length < 200 && !msg.startsWith('{') ? msg : fallback;
 }
 
