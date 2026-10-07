@@ -39,7 +39,13 @@ export const AuthView: React.FC<AuthViewProps> = ({ onToast }) => {
       return 'A senha deve conter pelo menos 6 caracteres.';
     }
     if (code === 'auth/unauthorized-domain') {
-      return 'Domínio não autorizado. Por favor, acesse com e-mail e senha.';
+      return 'este endereço do app não está autorizado no Firebase.';
+    }
+    if (code === 'auth/operation-not-allowed') {
+      return 'este método de login não está ativado no Firebase.';
+    }
+    if (code === 'auth/cancelled-popup-request') {
+      return 'outra janela de login já estava aberta.';
     }
     if (code === 'auth/popup-blocked') {
       return 'O navegador bloqueou a janela de autenticação. Sugerimos entrar com e-mail e senha.';
@@ -61,7 +67,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onToast }) => {
       onToast('Login realizado com Google');
     } catch (err: any) {
       console.error(err);
-      setError('Não foi possível entrar com Google. Tente entrar com seu e-mail e senha abaixo.');
+      const reason = translateAuthError(err);
+      const code = err?.code ? ` (${err.code})` : '';
+      setError(`Não foi possível entrar com Google: ${reason}${code}`);
     } finally {
       setIsLoading(false);
     }
