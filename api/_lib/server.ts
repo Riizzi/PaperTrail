@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export { Type };
@@ -10,10 +9,22 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-// Firebase Admin só verifica o token de login (não precisa de credenciais, só do projectId)
-const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-const adminApp = getApps().length === 0 ? initializeApp({ projectId }) : getApps()[0];
-const adminAuth = getAuth(adminApp);
+// Verificação do token de login do Firebase com as chaves públicas do Google (sem firebase-admin)
+const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';
+const firebaseJwks = createRemoteJWKSet(
+  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
+);
+
+async function verifyFirebaseToken(token: string): Promise<string> {
+  if (!projectId) throw new Error('FIREBASE_PROJECT_ID não configurado');
+  const { payload } = await jwtVerify(token, firebaseJwks, {
+    issuer: `https://securetoken.google.com/${projectId}`,
+    audience: projectId,
+    algorithms: ['RS256'],
+  });
+  if (!payload.sub) throw new Error('Token sem usuário');
+  return payload.sub;
+}
 
 // Supabase Storage (anexos). A service role key fica só no servidor.
 export const ATTACHMENTS_BUCKET = 'attachments';
@@ -70,9 +81,9 @@ export async function requireUser(req: any, res: any, opts: { countQuota?: boole
 
   let uid: string;
   try {
-    const decoded = await adminAuth.verifyIdToken(header.slice(7));
-    uid = decoded.uid;
-  } catch {
+    uid = await verifyFirebaseToken(header.slice(7));
+  } catch (err) {
+    console.warn('Token inválido:', (err as Error)?.message);
     sendJson(res, 401, { error: 'Sessão expirada. Entre novamente.' });
     return null;
   }
