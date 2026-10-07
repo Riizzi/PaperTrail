@@ -52,6 +52,8 @@ export const AddModal: React.FC<AddModalProps> = ({
   const [itemId] = useState(() => `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const [pdfStoragePath, setPdfStoragePath] = useState<string | null>(null);
   const [pdfUploadedFile, setPdfUploadedFile] = useState<File | null>(null);
+  // PDF baixado de um link (o servidor já guardou como anexo)
+  const [linkAttachment, setLinkAttachment] = useState<{ storagePath: string; name: string; size: number; mimeType: string } | null>(null);
 
   // Review & form state
   const [formData, setFormData] = useState<Partial<ReferenceItem>>({
@@ -80,7 +82,19 @@ export const AddModal: React.FC<AddModalProps> = ({
         extracted = await fetchFromOpenLibrary(isbnInput.trim());
       } else if (method === 'url') {
         if (!urlInput.trim()) throw new Error('Digite ou cole a URL.');
-        extracted = await requestMetadataFromUrl(urlInput.trim());
+        if (linkAttachment) {
+          await deleteItemAttachments(itemId);
+          setLinkAttachment(null);
+          setPdfStoragePath(null);
+        }
+        extracted = await requestMetadataFromUrl(urlInput.trim(), itemId);
+        const att = (extracted as any).attachment;
+        delete (extracted as any).attachment;
+        if (att?.storagePath) {
+          setLinkAttachment(att);
+          setPdfStoragePath(att.storagePath);
+          onToast('PDF do link baixado e anexado');
+        }
       } else if (method === 'pdf') {
         if (!pdfFile) throw new Error('Selecione um arquivo PDF.');
         if (pdfFile.size > MAX_ATTACHMENT_SIZE) throw new Error('Arquivo excede o limite de 20 MB.');
@@ -144,21 +158,28 @@ export const AddModal: React.FC<AddModalProps> = ({
     let keyPoints = formData.keyPoints || [];
     let keywords = formData.keywords || [];
 
-    // If added via PDF, automatically upload and attach file
-    if (method === 'pdf' && pdfFile) {
+    // PDF enviado (método PDF) ou baixado de um link: anexa, extrai o texto e gera o resumo
+    const pdfSource =
+      method === 'pdf' && pdfFile ? 'file' : method === 'url' && linkAttachment ? 'link' : null;
+    if (pdfSource) {
       try {
         onToast('Indexando o PDF...');
-        const storagePath =
-          pdfStoragePath && pdfUploadedFile === pdfFile
-            ? pdfStoragePath
-            : (await uploadItemAttachment(itemId, pdfFile)).storagePath;
-        attachmentInfo = {
-          name: pdfFile.name,
-          size: pdfFile.size,
-          mimeType: pdfFile.type || 'application/pdf',
-          storagePath,
-          uploadedAt: new Date().toISOString(),
-        };
+        if (pdfSource === 'file' && pdfFile) {
+          const storagePath =
+            pdfStoragePath && pdfUploadedFile === pdfFile
+              ? pdfStoragePath
+              : (await uploadItemAttachment(itemId, pdfFile)).storagePath;
+          attachmentInfo = {
+            name: pdfFile.name,
+            size: pdfFile.size,
+            mimeType: pdfFile.type || 'application/pdf',
+            storagePath,
+            uploadedAt: new Date().toISOString(),
+          };
+        } else if (linkAttachment) {
+          attachmentInfo = { ...linkAttachment, uploadedAt: new Date().toISOString() };
+        }
+        const storagePath = attachmentInfo!.storagePath;
 
         // Extrai o texto completo e guarda no Firestore
         const extractRes = await requestExtractText(storagePath);
@@ -375,7 +396,7 @@ export const AddModal: React.FC<AddModalProps> = ({
                     autoFocus
                   />
                   <p className="text-[11px] text-[#78716C] font-sans">
-                    Lê os dados da página (DOI e informações de citação). Confira tudo na revisão.
+                    Funciona com páginas de artigos e links diretos para PDF (o arquivo é anexado). Confira tudo na revisão.
                   </p>
                 </div>
               )}

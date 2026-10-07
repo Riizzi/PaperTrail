@@ -108,7 +108,7 @@ export async function requestSearchTerms(item: Partial<ReferenceItem>): Promise<
   return data.searchTerms || [];
 }
 
-export async function requestMetadataFromUrl(url: string): Promise<Partial<ReferenceItem>> {
+export async function requestMetadataFromUrl(url: string, itemId?: string): Promise<Partial<ReferenceItem>> {
   const authHeader = await getAuthHeader();
   const res = await fetch('/api/extract-metadata', {
     method: 'POST',
@@ -119,6 +119,7 @@ export async function requestMetadataFromUrl(url: string): Promise<Partial<Refer
     body: JSON.stringify({
       mode: 'url',
       url,
+      itemId,
     }),
   });
 

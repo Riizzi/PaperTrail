@@ -230,3 +230,74 @@ function toSentenceCase(t: string): string {
     .replace(/\.$/, '');
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
+
+/** Remove parâmetros de rastreamento (fbclid, utm_*, gclid...) */
+export function cleanUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    for (const k of [...u.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|mc_eid$|mc_cid$|igshid$|_hs)/i.test(k)) u.searchParams.delete(k);
+    }
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+/** Página de verificação anti-robô (Cloudflare, "Hold tight", captchas) em vez do conteúdo */
+export function isBotChallenge(status: number, html: string): boolean {
+  const sample = html.slice(0, 20000);
+  return (
+    /just a moment|checking your browser|hold tight|establishing a secure connection|cf-browser-verification|challenge-platform|cf-chl|ddos protection|attention required|captcha|verify you are human|access denied/i.test(sample) &&
+    (status >= 400 || !/citation_title|og:title/i.test(sample) || sample.length < 15000)
+  );
+}
+
+/** Sites WordPress (como o blog da SciELO): dados pela API pública do próprio site */
+export async function wordpressLookup(target: string): Promise<Meta | null> {
+  let u: URL;
+  try {
+    u = new URL(target);
+  } catch {
+    return null;
+  }
+  const tryJson = async (endpoint: string) => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const r = await fetch(endpoint, { headers: { Accept: 'application/json' }, signal: controller.signal });
+      clearTimeout(timer);
+      if (!r.ok || !/json/i.test(r.headers.get('content-type') || '')) return null;
+      return await r.json();
+    } catch {
+      return null;
+    }
+  };
+
+  const postId = u.searchParams.get('p');
+  if (postId && /^\d+$/.test(postId)) {
+    const post = await tryJson(`${u.origin}/wp-json/wp/v2/posts/${postId}?_embed=author`);
+    if (post?.title?.rendered) {
+      return {
+        type: 'webpage',
+        title: decodeEntities(stripTags(post.title.rendered)),
+        authors: post._embedded?.author?.[0]?.name || '',
+        year: String(post.date || '').slice(0, 4),
+        abstract: decodeEntities(stripTags(post.excerpt?.rendered || '')),
+        url: post.link || target,
+      };
+    }
+  }
+
+  const oembed = await tryJson(`${u.origin}/wp-json/oembed/1.0/embed?url=${encodeURIComponent(target)}`);
+  if (oembed?.title) {
+    return {
+      type: 'webpage',
+      title: decodeEntities(oembed.title),
+      authors: oembed.author_name || '',
+      publication: oembed.provider_name || '',
+      url: target,
+    };
+  }
+  return null;
+}
