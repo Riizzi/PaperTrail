@@ -37,6 +37,7 @@
     "vite-plugin-pwa": "^1.3.0"
   },
   "description": "Gerenciador de referências acadêmicas com resumo por IA e cópia em ABNT",
+  "license": "MIT",
   "engines": {
     "node": "22.x"
   }

@@ -1,87 +1,104 @@
+<div align="center">
+
+<img src="public/icon.svg" width="88" alt="PaperTrail icon" />
+
 # PaperTrail
 
-Gerenciador de referências acadêmicas, mobile-first, inspirado no Zotero. Guarda seus textos, gera resumos a partir do conteúdo anexado e copia a referência em ABNT pronta para colar no trabalho.
+**English** · [Português](README.pt-BR.md)
 
-Funciona como PWA: no iPhone (Safari → Compartilhar → Adicionar à Tela de Início) e no Android (Chrome → Instalar app).
+A mobile-first academic reference manager inspired by Zotero. It stores your readings, summarizes them from the attached full text, and copies the reference in ABNT format (the Brazilian citation standard), ready to paste into your paper.
 
-## Funcionalidades
+![React](https://img.shields.io/badge/React_19-292524?logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-292524?logo=typescript&logoColor=3178C6)
+![Firebase](https://img.shields.io/badge/Firebase-292524?logo=firebase&logoColor=FFCA28)
+![Supabase](https://img.shields.io/badge/Supabase-292524?logo=supabase&logoColor=3FCF8E)
+![Gemini](https://img.shields.io/badge/Gemini_API-292524?logo=googlegemini&logoColor=8E75B2)
+![Vercel](https://img.shields.io/badge/Vercel-292524?logo=vercel&logoColor=white)
 
-- **Adicionar textos** por DOI (CrossRef), ISBN (Open Library), URL, PDF ou manualmente, com revisão dos metadados antes de salvar
-- **Anexo em qualquer texto** (PDF, DOCX ou TXT até 20 MB), com extração do texto completo
-- **Resumo por IA baseado no texto anexado**: parágrafo, pontos-chave e palavras-chave. Sem anexo, usa o resumo original (abstract) e indica isso; sem nenhum dos dois, não gera nada
-- **Textos relacionados reais**: o Gemini gera termos de busca e os resultados vêm do [OpenAlex](https://openalex.org), sem referências inventadas
-- **Copiar em ABNT (NBR 6023:2018)** com formatação feita por código, não por IA: referência completa, citação direta e indireta e autor no texto. Copia com negrito para Word e Google Docs
-- **Referências da coleção** em ordem alfabética, prontas para a lista final
-- **Apontamentos** em post-its, com página opcional e atalho para copiar a citação direta
-- Coleções, tags, status de leitura, favoritos e busca
-- Backup em JSON e exportação em BibTeX
-- Sincronização entre aparelhos e uso offline
+</div>
 
-## Stack
+Installable as a PWA on iPhone (Safari → Share → Add to Home Screen) and Android (Chrome → Install app).
 
-| Parte | Tecnologia |
+> The app interface is in Brazilian Portuguese.
+
+## Features
+
+- **Add readings** by DOI (CrossRef), ISBN (Open Library), URL, PDF or manually, with a metadata review step before saving
+- **Attach files to any reading** (PDF, DOCX or TXT up to 20 MB) with full-text extraction
+- **AI summaries grounded in the attached text**: paragraph, key points and keywords. Without an attachment it falls back to the original abstract and says so; with neither, it generates nothing
+- **Real related readings**: Gemini only produces search terms, and results come from [OpenAlex](https://openalex.org), so no invented references
+- **Copy in ABNT (NBR 6023:2018)**, formatted by code rather than by AI: full reference, direct and indirect citations, and author-in-text. Copies with bold formatting for Word and Google Docs
+- **Collection bibliography** in alphabetical order, ready for the final reference list
+- **Sticky notes** with optional page number and a shortcut to copy the direct citation
+- Collections, tags, reading status, favorites and search
+- JSON backup and BibTeX export
+- Multi-device sync and offline use
+
+## Tech stack
+
+| Layer | Technology |
 |---|---|
-| Interface | React 19, TypeScript, Vite, Tailwind CSS 4, PWA (vite-plugin-pwa) |
-| Login e dados | Firebase Authentication + Cloud Firestore (cache offline) |
-| Anexos | Supabase Storage (bucket privado, links assinados) |
-| IA | Gemini (`@google/genai`) com saída em JSON estruturado |
-| Servidor | Funções serverless da Vercel em `/api` |
+| UI | React 19, TypeScript, Vite, Tailwind CSS 4, PWA (vite-plugin-pwa) |
+| Auth & data | Firebase Authentication + Cloud Firestore (offline cache) |
+| Attachments | Supabase Storage (private bucket, signed URLs) |
+| AI | Gemini (`@google/genai`) with structured JSON output |
+| Backend | Vercel serverless functions in `/api` |
 
-Todos os serviços usados cabem nos planos gratuitos, sem cartão.
+Every service fits in a free tier, with no credit card required.
 
-## Arquitetura
+## Architecture
 
 ```
-Navegador (PWA)
- ├─ Firebase Auth ............ login (Google ou e-mail)
- ├─ Firestore ................ biblioteca, coleções, texto extraído
- ├─ Supabase Storage ......... envio direto do arquivo com token de uso único
- └─ /api (Vercel) ............ verifica o token do Firebase em toda chamada
-     ├─ storage .............. gera tokens de envio e links temporários
-     ├─ extract-text ......... PDF (unpdf), DOCX (mammoth), TXT; OCR via Gemini se o PDF for escaneado
-     ├─ extract-metadata ..... metadados de URL ou PDF via Gemini
-     ├─ summarize ............ resumo a partir do texto completo ou do abstract
-     └─ search-terms ......... termos para a busca no OpenAlex
+Browser (PWA)
+ ├─ Firebase Auth ............ sign-in (Google or email)
+ ├─ Firestore ................ library, collections, extracted text
+ ├─ Supabase Storage ......... direct upload with a single-use token
+ └─ /api (Vercel) ............ verifies the Firebase ID token on every call
+     ├─ storage .............. issues upload tokens and short-lived download links
+     ├─ extract-text ......... PDF (unpdf), DOCX (mammoth), TXT; Gemini OCR for scanned PDFs
+     ├─ extract-metadata ..... metadata from a URL or PDF via Gemini
+     ├─ summarize ............ summary from the full text or the abstract
+     └─ search-terms ......... terms for the OpenAlex search
 ```
 
-A chave do Gemini e a chave de serviço do Supabase ficam só no servidor. Cada usuário tem um limite diário de chamadas de IA.
+The Gemini key and the Supabase service key live only on the server. Each user has a daily AI call limit, and Gemini calls retry and fall back to other Flash models when one is overloaded.
 
-## Rodando localmente
+## Getting started
 
 ```bash
 npm install
-cp .env.example .env.local   # preencha as variáveis
+cp .env.example .env.local   # fill in the variables
 npm run dev                  # http://localhost:3000
 ```
 
-As rotas `/api` rodam dentro do servidor do Vite em desenvolvimento.
+In development, the `/api` routes run inside the Vite dev server.
 
 ```bash
-npm test       # testes da formatação ABNT
-npm run lint   # checagem de tipos
+npm test       # ABNT formatting tests
+npm run lint   # type check
 npm run build
 ```
 
-## Configuração dos serviços
+## Service setup
 
 ### Firebase
-1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com) (plano Spark, gratuito)
-2. **Authentication** → ative Google e E-mail/senha
-3. **Firestore Database** → crie o banco e cole o conteúdo de `firestore.rules` na aba Regras
-4. **Configurações do projeto** → adicione um app Web e copie os valores para as variáveis `VITE_FIREBASE_*`
-5. Depois do deploy, adicione o domínio do app em Authentication → Settings → Authorized domains
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com) (free Spark plan)
+2. **Authentication** → enable Google and Email/Password
+3. **Firestore Database** → create the database and paste `firestore.rules` into the Rules tab
+4. **Project settings** → add a Web app and copy its values into the `VITE_FIREBASE_*` variables
+5. After deploying, add the app's domain under Authentication → Settings → Authorized domains
 
 ### Supabase
-1. Crie um projeto em [supabase.com](https://supabase.com) (plano Free)
-2. **SQL Editor** → rode `supabase/setup.sql` para criar o bucket privado `attachments`
-3. **Project Settings → API** → copie a URL, a `anon key` e a `service_role key`
+1. Create a project at [supabase.com](https://supabase.com) (Free plan)
+2. **SQL Editor** → run `supabase/setup.sql` to create the private `attachments` bucket
+3. **Project Settings → API** → copy the URL, the `anon` key and the `service_role` key
 
 ### Gemini
-Gere a chave em [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+Create a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
 ### Vercel
-Importe o repositório, cadastre as variáveis do `.env.example` e publique. O `vercel.json` já configura as funções e as rotas do app.
+Import the repository, add the variables from `.env.example` and deploy. `vercel.json` already configures the functions and app routes.
 
-## Licença
+## License
 
-MIT
+[MIT](LICENSE)
