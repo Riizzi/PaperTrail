@@ -8,6 +8,7 @@ import {
   saveUserCollection,
 } from '../services/firebase';
 import { Download, Upload, LogOut, Trash2, Database, HardDrive, AlertTriangle, X } from 'lucide-react';
+import Cl4pLinkCard from './Cl4pLinkCard';
 
 interface AccountViewProps {
   user: User;
@@ -131,6 +132,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   return (
     <div className="space-y-4 text-xs font-mono">
+      <div className="font-sans">
+        <Cl4pLinkCard />
+      </div>
       {/* Account Info Card */}
       <div className="bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-4 space-y-3">
         <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-[#57534E]">
