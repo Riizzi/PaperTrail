@@ -108,18 +108,29 @@ export function cl4pDesvincular() {
   avisar();
 }
 
-/** Lê ?cl4p=<código> da URL atual, vincula e limpa a barra de endereço. */
+/**
+ * Lê o código da URL atual e limpa a barra de endereço. O hub manda no fragmento (#cl4p=...),
+ * que não vai para o servidor nem aparece nos logs; ?cl4p= continua aceito.
+ */
 export function cl4pCapturarDaUrl(): boolean {
   try {
     const u = new URL(window.location.href);
-    const cod = u.searchParams.get('cl4p');
+    const hash = new URLSearchParams(u.hash.replace(/^#/, ''));
+    const cod = hash.get('cl4p') || u.searchParams.get('cl4p');
     if (!cod) return false;
     u.searchParams.delete('cl4p');
-    history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+    hash.delete('cl4p');
+    const resto = hash.toString();
+    history.replaceState(history.state, '', u.pathname + u.search + (resto ? `#${resto}` : ''));
     return cl4pVincular(cod);
   } catch {
     return false;
   }
+}
+
+/** Endereço e chave do vínculo atual (para apps que usam outras rotas do hub). */
+export function cl4pVinculo(): Cl4pVinculo | null {
+  return vinculo ? { ...vinculo } : null;
 }
 
 /** Para deep links nativos: esquema://cl4p?code=<código>. Retorna true se a URL era de vínculo. */
