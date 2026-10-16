@@ -18,6 +18,9 @@ import { ItemCard } from './components/ItemCard';
 import { CollectionsView } from './components/CollectionsView';
 import { SearchView } from './components/SearchView';
 import { AccountView } from './components/AccountView';
+import { cl4pCapturarDaUrl, cl4pPublicar } from './services/cl4pLink';
+import { montarResumoPaper } from './services/cl4pPaper';
+
 import { AuthView } from './components/AuthView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, type ToastMessage } from './components/Toast';
@@ -26,6 +29,9 @@ import {
   Plus,
   Loader2,
 } from 'lucide-react';
+
+// Vínculo com o hub CL4P-RZ vindo pela URL (?cl4p=...)
+cl4pCapturarDaUrl();
 
 // Code-split modals with React.lazy to reduce initial bundle size
 const AddModal = lazy(() => import('./components/AddModal').then(m => ({ default: m.AddModal })));
@@ -39,6 +45,11 @@ export default function App() {
   const [items, setItems] = useState<ReferenceItem[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
+
+  // Envia o resumo da biblioteca ao hub CL4P-RZ quando os dados mudam
+  useEffect(() => {
+    if (!isDataLoading && items.length) cl4pPublicar('papertrail', () => montarResumoPaper(items, collections));
+  }, [items, collections, isDataLoading]);
 
   // Navigation & Modals
   const [currentTab, setCurrentTab] = useState<TabType>('library');
