@@ -127,7 +127,7 @@ const firebaseJwks = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
 );
 
-async function verifyFirebaseToken(token: string): Promise<string> {
+async function verifyFirebaseToken(token: string): Promise<{ uid: string; email?: string }> {
   if (!projectId) throw new Error('FIREBASE_PROJECT_ID não configurado');
   const { payload } = await jwtVerify(token, firebaseJwks, {
     issuer: `https://securetoken.google.com/${projectId}`,
@@ -135,7 +135,7 @@ async function verifyFirebaseToken(token: string): Promise<string> {
     algorithms: ['RS256'],
   });
   if (!payload.sub) throw new Error('Token sem usuário');
-  return payload.sub;
+  return { uid: payload.sub, email: typeof payload.email === 'string' ? payload.email.toLowerCase() : undefined };
 }
 
 // Anexos no Vercel Blob (store privado). O token BLOB_READ_WRITE_TOKEN fica só no servidor.
@@ -179,6 +179,11 @@ export function sendJson(res: any, status: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
+const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
 // Limite diário por usuário (em memória, por instância do servidor)
 const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const rateLimits = new Map<string, { count: number; date: string }>();
@@ -212,11 +217,18 @@ export async function requireUser(req: any, res: any, opts: { countQuota?: boole
   }
 
   let uid: string;
+  let email: string | undefined;
   try {
-    uid = await verifyFirebaseToken(header.slice(7));
+    ({ uid, email } = await verifyFirebaseToken(header.slice(7)));
   } catch (err) {
     console.warn('Token inválido:', (err as Error)?.message);
     sendJson(res, 401, { error: 'Sessão expirada. Entre novamente.' });
+    return null;
+  }
+
+  // App pessoal: com ALLOWED_EMAILS definida, só essas contas usam a IA e os anexos
+  if (ALLOWED_EMAILS.length && (!email || !ALLOWED_EMAILS.includes(email))) {
+    sendJson(res, 403, { error: 'Esta conta não tem acesso aos recursos do servidor.' });
     return null;
   }
 

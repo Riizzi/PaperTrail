@@ -67,3 +67,10 @@ test('HTML escapado', () => {
   const r = formatReferenceABNT(base({ type: 'book', title: 'A <b> & C', year: '2020' }));
   assert.match(r.html, /A &lt;b&gt; &amp; C/);
 });
+
+test('autor que termina em ponto não fica com ponto duplo', () => {
+  const etal = formatReferenceABNT(base({ authors: 'A, B; C, D; E, F; G, H', title: 'T', publication: 'R', year: '2020' }));
+  assert.match(etal.plain, /^A, B et al\. T\./);
+  const initial = formatReferenceABNT(base({ type: 'book', authors: 'Clark, George C.', title: 'Livro', place: 'New York', publisher: 'Plenum', year: '1981' }));
+  assert.equal(initial.plain, 'CLARK, George C. Livro. New York: Plenum, 1981.');
+});

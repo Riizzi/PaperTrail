@@ -185,7 +185,8 @@ export interface ABNTResult {
  */
 export function formatReferenceABNT(item: ReferenceItem): ABNTResult {
   const authorsABNT = formatAuthorsABNT(item.authors);
-  const authorPrefix = authorsABNT ? `${authorsABNT}. ` : '';
+  // Nome que já termina em ponto ("et al.", "George C.") não leva outro
+  const authorPrefix = authorsABNT ? `${authorsABNT.replace(/\.$/, '')}. ` : '';
 
   // Sem ano: usar data provável entre colchetes ex: [2024?] em vez de s.d.
   const year = item.year?.trim() || UNKNOWN_YEAR;

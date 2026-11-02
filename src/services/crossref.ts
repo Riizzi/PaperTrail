@@ -1,40 +1,42 @@
 import type { ReferenceItem } from '../types';
+import { fetchJson, HttpError, stripMarkup, abntEdition } from './http';
 
 /**
- * Fetch bibliographic metadata from CrossRef API via DOI
+ * Metadados pelo DOI na API pública do Crossref
  */
 export async function fetchFromCrossRef(doiInput: string): Promise<Partial<ReferenceItem>> {
-  const cleanDoi = doiInput.trim().replace(/^https?:\/\/doi\.org\//, '').replace(/^doi:\s*/i, '');
+  const cleanDoi = doiInput
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
+    .replace(/^doi:\s*/i, '');
   if (!cleanDoi) {
     throw new Error('DOI inválido ou vazio');
   }
 
-  const url = `https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`;
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error('DOI não encontrado no CrossRef.');
+  let data: any;
+  try {
+    data = await fetchJson(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`, { timeoutMs: 12_000 });
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) {
+      throw new Error('DOI não encontrado no Crossref. Confira o número ou tente pelo link.');
     }
-    throw new Error(`Erro ao consultar CrossRef (${response.status})`);
+    if (err instanceof HttpError && err.status === 0) {
+      throw new Error('O Crossref demorou para responder. Tente de novo em instantes.');
+    }
+    throw new Error('Não foi possível consultar o Crossref agora. Tente de novo em instantes.');
   }
 
-  const data = await response.json();
-  const message = data.message;
+  const message = data?.message;
   if (!message) {
-    throw new Error('Resposta inválida do CrossRef.');
+    throw new Error('Resposta inválida do Crossref.');
   }
 
-  // Determine type
+  // Tipo
   let type: ReferenceItem['type'] = 'article';
   const crType = message.type;
-  if (crType === 'book' || crType === 'monograph') {
+  if (crType === 'book' || crType === 'monograph' || crType === 'edited-book' || crType === 'reference-book') {
     type = 'book';
-  } else if (crType === 'book-chapter' || crType === 'book-section') {
+  } else if (crType === 'book-chapter' || crType === 'book-section' || crType === 'book-part') {
     type = 'chapter';
   } else if (crType === 'proceedings-article') {
     type = 'conference';
@@ -42,48 +44,44 @@ export async function fetchFromCrossRef(doiInput: string): Promise<Partial<Refer
     type = 'thesis';
   }
 
-  // Parse Title & Subtitle
-  const titles = message.title || [];
-  const fullTitle = titles[0] || '';
-  const subtitles = message.subtitle || [];
-  const subtitle = subtitles[0] || '';
+  const fullTitle = stripMarkup(message.title?.[0]);
+  const subtitle = stripMarkup(message.subtitle?.[0]);
 
-  // Parse Authors
-  let authors = '';
-  if (Array.isArray(message.author)) {
-    authors = message.author
-      .map((a: any) => {
-        if (a.family && a.given) {
-          return `${a.family}, ${a.given}`;
-        }
-        return a.name || a.family || a.given || '';
-      })
+  const names = (list: any[] | undefined) =>
+    (Array.isArray(list) ? list : [])
+      .map((a: any) => (a.family && a.given ? `${a.family}, ${a.given}` : a.name || a.family || a.given || ''))
       .filter(Boolean)
       .join('; ');
-  }
 
-  // Year
+  // Ano: data de publicação "oficial" primeiro
   let year = '';
-  const published = message['published-print'] || message['published-online'] || message.created;
-  if (published && published['date-parts'] && published['date-parts'][0]) {
-    year = String(published['date-parts'][0][0] || '');
+  const published =
+    message.issued || message['published-print'] || message['published-online'] || message.published || message.created;
+  if (published?.['date-parts']?.[0]?.[0]) {
+    year = String(published['date-parts'][0][0]);
   }
 
-  // Publication / Container
-  const containerTitles = message['container-title'] || [];
-  const publication = containerTitles[0] || message.publisher || '';
+  const container = stripMarkup(message['container-title']?.[0]);
+  const isbn = Array.isArray(message.ISBN) ? message.ISBN[0] : undefined;
+  const abstract = stripMarkup(message.abstract).replace(/^(abstract|resumo)\s*[:.]?\s*/i, '');
 
   return {
     type,
     title: fullTitle,
     subtitle: subtitle || undefined,
-    authors: authors || undefined,
+    authors: names(message.author) || undefined,
     year: year || undefined,
-    publication: publication || undefined,
+    publication: type === 'chapter' ? undefined : container || undefined,
+    bookTitle: type === 'chapter' ? container || undefined : undefined,
+    bookOrganizer: type === 'chapter' ? names(message.editor) || undefined : undefined,
     publisher: message.publisher || undefined,
+    place: message['publisher-location'] || undefined,
     volume: message.volume ? String(message.volume) : undefined,
     number: message.issue ? String(message.issue) : undefined,
     pages: message.page ? String(message.page) : undefined,
+    edition: abntEdition(message['edition-number']),
+    isbn,
+    abstract: abstract || undefined,
     doi: message.DOI || cleanDoi,
     url: message.URL || `https://doi.org/${cleanDoi}`,
   };

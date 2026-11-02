@@ -21,15 +21,17 @@ Funciona como PWA: no iPhone (Safari → Compartilhar → Adicionar à Tela de I
 
 ## Funcionalidades
 
-- **Adicionar textos** por DOI (CrossRef), ISBN (Open Library), URL, PDF ou manualmente, com revisão dos metadados antes de salvar
+- **Adicionar textos** colando um DOI, ISBN, link ou arXiv (o app reconhece sozinho), arrastando um PDF para a janela ou preenchendo à mão, com revisão dos metadados antes de salvar. Dados do Crossref, Open Library e Google Books
 - **Anexo em qualquer texto** (PDF, DOCX ou TXT até 20 MB), com extração do texto completo
 - **Resumo por IA baseado no texto anexado**: parágrafo, pontos-chave e palavras-chave. Sem anexo, usa o resumo original (abstract) e indica isso; sem nenhum dos dois, não gera nada
 - **Textos relacionados reais**: o Gemini gera termos de busca e os resultados vêm do [OpenAlex](https://openalex.org), sem referências inventadas
 - **Copiar em ABNT (NBR 6023:2018)** com formatação feita por código, não por IA: referência completa, citação direta e indireta e autor no texto. Copia com negrito para Word e Google Docs
 - **Referências da coleção** em ordem alfabética, prontas para a lista final
 - **Apontamentos** em post-its, com página opcional e atalho para copiar a citação direta
-- Coleções, tags, status de leitura, favoritos e busca
-- Backup em JSON e exportação em BibTeX
+- Coleções, tags, status de leitura, favoritos e busca sem acento por título, autor, resumo, DOI e apontamentos
+- **Ações em lote**: mudar status, pôr em coleção, copiar a lista ABNT ou excluir vários textos
+- **Importar do Zotero/Mendeley** (BibTeX ou RIS, pulando duplicados) e exportar em BibTeX, RIS ou JSON
+- **Computador**: barra lateral, lista e texto aberto lado a lado, leitor de PDF embutido e atalhos de teclado (`?` mostra a lista)
 - Sincronização entre aparelhos e uso offline
 
 ## Stack
@@ -59,7 +61,7 @@ Navegador (PWA)
      └─ search-terms ......... termos para a busca no OpenAlex
 ```
 
-A chave do Gemini e o token do Blob ficam só no servidor. Cada usuário tem um limite diário de chamadas de IA.
+A chave do Gemini e o token do Blob ficam só no servidor. Com `ALLOWED_EMAILS` definida, só essas contas usam IA e anexos. Cada usuário tem um limite diário de chamadas de IA.
 
 ## Rodando localmente
 

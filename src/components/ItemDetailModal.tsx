@@ -30,6 +30,7 @@ import { saveItemFulltext, deleteItemFulltext } from '../services/firebase';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { PdfReader } from './PdfReader';
+import { ItemEditForm } from './ItemEditForm';
 import { uploadItemAttachment, deleteItemAttachment, openAttachment, MAX_ATTACHMENT_SIZE } from '../services/attachments';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -110,26 +111,64 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
 
   const [activeEditingNoteId, setActiveEditingNoteId] = useState<string | null>(null);
 
-  // Edit form state
-  const [editForm, setEditForm] = useState<ReferenceItem>({ ...item });
-  const [tagInput, setTagInput] = useState('');
 
   // Missing ABNT fields
   const missingABNTFields = getMissingABNTFields(item);
 
-  // Load related works
+  // Textos relacionados: só carrega quando a seção aparece na tela.
+  // Os termos de busca (gerados pela IA) ficam guardados no próprio texto, para não gastar
+  // a cota de IA toda vez que ele é aberto; o resultado do OpenAlex fica na sessão.
+  const relatedRef = useRef<HTMLElement>(null);
+  const relatedLoaded = useRef(false);
   useEffect(() => {
-    loadRelatedWorks();
-  }, [item.id]);
+    const el = relatedRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && !relatedLoaded.current) {
+          relatedLoaded.current = true;
+          loadRelatedWorks();
+          obs.disconnect();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, activeTab]);
 
-  const loadRelatedWorks = async () => {
+  const loadRelatedWorks = async (force = false) => {
+    const cacheKey = `pt_related_${item.id}`;
+    if (!force) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setRelatedWorks(JSON.parse(cached));
+          return;
+        }
+      } catch {
+        // sessão sem storage: segue buscando
+      }
+    }
     setIsLoadingRelated(true);
     setRelatedError(null);
     try {
-      const terms = await requestSearchTerms(item);
+      let terms = !force && item.relatedTerms?.length ? item.relatedTerms : null;
+      if (!terms) {
+        terms = await requestSearchTerms(item);
+        if (terms?.length) {
+          onUpdateItem({ ...item, relatedTerms: terms }).catch(() => {});
+        }
+      }
       const searchTerms = terms && terms.length > 0 ? terms : [item.title];
       const works = await searchOpenAlexWorks(searchTerms, item.title);
       setRelatedWorks(works);
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(works));
+      } catch {
+        // cheio: tudo bem
+      }
     } catch {
       try {
         const fallbackWords = item.title.split(/\s+/).slice(0, 4).join(' ');
@@ -390,10 +429,12 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
     }
   };
 
-  const handleSaveEditForm = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Aplica só os metadados editados sobre a versão atual do texto (anexo, resumo e
+  // apontamentos que mudaram enquanto o formulário estava aberto não se perdem)
+  const handleSaveEditForm = async (fields: Partial<ReferenceItem>) => {
     await onUpdateItem({
-      ...editForm,
+      ...item,
+      ...fields,
       updatedAt: new Date().toISOString(),
     });
     setActiveTab('content');
@@ -484,204 +525,12 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
         {/* Scrollable Content Area */}
         <div className="overflow-y-auto flex-1 p-4 space-y-5">
           {activeTab === 'edit' ? (
-            <form onSubmit={handleSaveEditForm} className="space-y-4 text-xs font-mono">
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Tipo de documento</label>
-                <select
-                  value={editForm.type}
-                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value as any })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                >
-                  <option value="article">Artigo de periódico</option>
-                  <option value="book">Livro</option>
-                  <option value="chapter">Capítulo de livro</option>
-                  <option value="thesis">Tese / Dissertação / TCC</option>
-                  <option value="conference">Trabalho em evento</option>
-                  <option value="webpage">Site / Página Web</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Título *</label>
-                <input
-                  type="text"
-                  value={editForm.title}
-                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Subtítulo</label>
-                <input
-                  type="text"
-                  value={editForm.subtitle || ''}
-                  onChange={(e) => setEditForm({ ...editForm, subtitle: e.target.value })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Autores (separados por ponto e vírgula)</label>
-                <input
-                  type="text"
-                  value={editForm.authors || ''}
-                  onChange={(e) => setEditForm({ ...editForm, authors: e.target.value })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Ano</label>
-                  <input
-                    type="text"
-                    value={editForm.year || ''}
-                    onChange={(e) => setEditForm({ ...editForm, year: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Local</label>
-                  <input
-                    type="text"
-                    value={editForm.place || ''}
-                    onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Periódico / Veículo / Evento</label>
-                  <input
-                    type="text"
-                    value={editForm.publication || ''}
-                    onChange={(e) => setEditForm({ ...editForm, publication: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Editora</label>
-                  <input
-                    type="text"
-                    value={editForm.publisher || ''}
-                    onChange={(e) => setEditForm({ ...editForm, publisher: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Volume</label>
-                  <input
-                    type="text"
-                    value={editForm.volume || ''}
-                    onChange={(e) => setEditForm({ ...editForm, volume: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Número</label>
-                  <input
-                    type="text"
-                    value={editForm.number || ''}
-                    onChange={(e) => setEditForm({ ...editForm, number: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">Páginas</label>
-                  <input
-                    type="text"
-                    value={editForm.pages || ''}
-                    onChange={(e) => setEditForm({ ...editForm, pages: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">DOI</label>
-                  <input
-                    type="text"
-                    value={editForm.doi || ''}
-                    onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#78716C] mb-1 font-sans">ISBN</label>
-                  <input
-                    type="text"
-                    value={editForm.isbn || ''}
-                    onChange={(e) => setEditForm({ ...editForm, isbn: e.target.value })}
-                    className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">URL</label>
-                <input
-                  type="url"
-                  value={editForm.url || ''}
-                  onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Data de acesso</label>
-                <input
-                  type="text"
-                  value={editForm.accessDate || ''}
-                  onChange={(e) => setEditForm({ ...editForm, accessDate: e.target.value })}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-mono text-xs"
-                  placeholder="ex: 30 set. 2026"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#78716C] mb-1 font-sans">Resumo original (Abstract)</label>
-                <textarea
-                  value={editForm.abstract || ''}
-                  onChange={(e) => setEditForm({ ...editForm, abstract: e.target.value })}
-                  rows={3}
-                  className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-2 font-sans text-xs"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-[#E8DFD1]">
-                <button
-                  type="button"
-                  onClick={() => onDeleteItem(item.id)}
-                  className="px-3 py-1.5 text-xs text-[#991B1B] hover:bg-[#FEE2E2] border border-[#FCA5A5] flex items-center gap-1 font-mono"
-                >
-                  <Trash2 size={13} />
-                  Excluir texto
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('content')}
-                    className="ledger-btn px-3 py-1.5 text-xs font-mono"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="ledger-btn-primary px-4 py-1.5 text-xs font-mono"
-                  >
-                    Salvar alterações
-                  </button>
-                </div>
-              </div>
-            </form>
+            <ItemEditForm
+              item={item}
+              onSave={handleSaveEditForm}
+              onCancel={() => setActiveTab('content')}
+              onDelete={() => onDeleteItem(item.id)}
+            />
           ) : (
             <>
               {/* 1. Metadados */}
@@ -1042,7 +891,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               </section>
 
               {/* 4. Seção "Textos relacionados" (OpenAlex real works) */}
-              <section className="p-3.5 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow space-y-3">
+              <section ref={relatedRef} className="p-3.5 bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow space-y-3">
                 <div className="flex items-center justify-between border-b border-[#F0E9DF] pb-2">
                   <div className="flex items-center gap-1.5">
                     <BookOpen size={15} strokeWidth={1.8} className="text-[#292524]" />
@@ -1051,7 +900,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                     </h2>
                   </div>
                   <button
-                    onClick={loadRelatedWorks}
+                    onClick={() => loadRelatedWorks(true)}
                     disabled={isLoadingRelated}
                     className="text-xs font-mono text-[#78716C] hover:text-[#292524] px-2 py-1 -mr-2 shrink-0"
                   >

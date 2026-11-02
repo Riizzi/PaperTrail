@@ -150,6 +150,21 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    build: {
+      // o chunk do Firebase passa de 500 kB sozinho; o resto fica bem abaixo
+      chunkSizeWarningLimit: 700,
+      rolldownOptions: {
+        output: {
+          // Bibliotecas que mudam pouco em chunks próprios: ficam em cache entre deploys
+          codeSplitting: {
+            groups: [
+              { name: 'firebase', test: /node_modules[\/](@firebase|firebase)[\/]/ },
+              { name: 'react', test: /node_modules[\/](react|react-dom|scheduler)[\/]/ },
+            ],
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve('.'),

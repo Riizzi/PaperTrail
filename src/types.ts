@@ -61,6 +61,8 @@ export interface ReferenceItem {
   wordCount?: number;
   keyPoints?: string[];
   keywords?: string[];
+  /** Termos de busca do OpenAlex gerados pela IA (guardados para não gastar cota de novo) */
+  relatedTerms?: string[];
   attachment?: AttachmentInfo;
   createdAt: string;
   updatedAt: string;

@@ -23,15 +23,17 @@ Installable as a PWA on iPhone (Safari → Share → Add to Home Screen) and And
 
 ## Features
 
-- **Add readings** by DOI (CrossRef), ISBN (Open Library), URL, PDF or manually, with a metadata review step before saving
+- **Add readings** by pasting a DOI, ISBN, link or arXiv ID (detected automatically), dropping a PDF on the window, or filling in by hand, with a metadata review step before saving. Data from Crossref, Open Library and Google Books
 - **Attach files to any reading** (PDF, DOCX or TXT up to 20 MB) with full-text extraction
 - **AI summaries grounded in the attached text**: paragraph, key points and keywords. Without an attachment it falls back to the original abstract and says so; with neither, it generates nothing
 - **Real related readings**: Gemini only produces search terms, and results come from [OpenAlex](https://openalex.org), so no invented references
 - **Copy in ABNT (NBR 6023:2018)**, formatted by code rather than by AI: full reference, direct and indirect citations, and author-in-text. Copies with bold formatting for Word and Google Docs
 - **Collection bibliography** in alphabetical order, ready for the final reference list
 - **Sticky notes** with optional page number and a shortcut to copy the direct citation
-- Collections, tags, reading status, favorites and search
-- JSON backup and BibTeX export
+- Collections, tags, reading status, favorites and accent-insensitive search across title, authors, abstract, DOI and notes
+- **Bulk actions**: change status, add to a collection, copy the ABNT list or delete several readings
+- **Import from Zotero/Mendeley** (BibTeX or RIS, skipping duplicates) and export to BibTeX, RIS or JSON
+- **Desktop layout**: sidebar, list and open reading side by side, built-in PDF reader and keyboard shortcuts (`?` shows them)
 - Multi-device sync and offline use
 
 ## Tech stack
@@ -61,7 +63,7 @@ Browser (PWA)
      └─ search-terms ......... terms for the OpenAlex search
 ```
 
-The Gemini key and the Blob token live only on the server. Each user has a daily AI call limit, and Gemini calls retry and fall back to other Flash models when one is overloaded.
+The Gemini key and the Blob token live only on the server. With `ALLOWED_EMAILS` set, only those accounts can use AI and attachments. Each user has a daily AI call limit, and Gemini calls retry and fall back to other Flash models when one is overloaded.
 
 ## Getting started
 
