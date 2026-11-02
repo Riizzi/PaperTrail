@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ReferenceItem, Collection, DocumentType } from '../types';
 import {
   X,
@@ -10,6 +10,7 @@ import {
   Loader2,
   ArrowLeft,
   Check,
+  ClipboardPaste,
 } from 'lucide-react';
 import { fetchFromCrossRef } from '../services/crossref';
 import { fetchFromOpenLibrary } from '../services/openlibrary';
@@ -17,37 +18,51 @@ import { requestMetadataFromUrl, requestMetadataFromPdf, requestExtractText, req
 import { formatMonthAbbr } from '../services/abnt';
 import { saveItemFulltext } from '../services/firebase';
 import { uploadItemAttachment, deleteItemAttachments, MAX_ATTACHMENT_SIZE } from '../services/attachments';
+import { detectInput, PDF_FILE_RE } from '../services/detect';
+
+export type AddMethod = 'auto' | 'doi' | 'isbn' | 'url' | 'pdf' | 'manual';
+
+/** Entrada que já chega pronta (colada ou arrastada na tela): a busca começa sozinha */
+export interface AddInitial {
+  method: Exclude<AddMethod, 'auto' | 'manual'>;
+  value?: string;
+  file?: File;
+}
 
 interface AddModalProps {
   userId: string;
   collections: Collection[];
   prefilledDoi?: string;
+  initial?: AddInitial;
   onClose: () => void;
   onSave: (item: ReferenceItem) => Promise<void>;
   onToast: (msg: string) => void;
 }
 
-type AddMethod = 'doi' | 'isbn' | 'url' | 'pdf' | 'manual';
 
 export const AddModal: React.FC<AddModalProps> = ({
   userId,
   collections,
   prefilledDoi,
+  initial,
   onClose,
   onSave,
   onToast,
 }) => {
-  const [method, setMethod] = useState<AddMethod>(prefilledDoi ? 'doi' : 'doi');
+  const [method, setMethod] = useState<AddMethod>(initial?.method || (prefilledDoi ? 'doi' : 'auto'));
   const [step, setStep] = useState<'input' | 'review'>(prefilledDoi ? 'input' : 'input');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Input states
-  const [doiInput, setDoiInput] = useState(prefilledDoi || '');
-  const [isbnInput, setIsbnInput] = useState('');
-  const [urlInput, setUrlInput] = useState('');
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [autoInput, setAutoInput] = useState('');
+  const [doiInput, setDoiInput] = useState(prefilledDoi || (initial?.method === 'doi' ? initial.value || '' : ''));
+  const [isbnInput, setIsbnInput] = useState(initial?.method === 'isbn' ? initial.value || '' : '');
+  const [urlInput, setUrlInput] = useState(initial?.method === 'url' ? initial.value || '' : '');
+  const [pdfFile, setPdfFile] = useState<File | null>(initial?.file || null);
+  const [isDragging, setIsDragging] = useState(false);
+  const detected = method === 'auto' ? detectInput(autoInput) : null;
   // ID definido na abertura para o PDF já ir para a pasta certa do anexo
   const [itemId] = useState(() => `item_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const [pdfStoragePath, setPdfStoragePath] = useState<string | null>(null);
@@ -67,28 +82,52 @@ export const AddModal: React.FC<AddModalProps> = ({
   const [tagInput, setTagInput] = useState('');
 
   // Handle Fetching Metadata
-  const handleFetchMetadata = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFetchMetadata = async (e?: React.FormEvent, override?: AddInitial) => {
+    e?.preventDefault();
+    let m: AddMethod = override?.method || method;
+    let doiVal = override?.method === 'doi' ? override.value || '' : doiInput;
+    let isbnVal = override?.method === 'isbn' ? override.value || '' : isbnInput;
+    let urlVal = override?.method === 'url' ? override.value || '' : urlInput;
+    const pdfFile_ = override?.method === 'pdf' ? override.file || null : pdfFile;
+
+    // Campo único: descobre se é DOI, ISBN, arXiv ou link e segue pelo método certo
+    if (m === 'auto') {
+      const d = detectInput(autoInput);
+      if (!d) {
+        setErrorMessage('Não reconheci DOI, ISBN ou link. Confira o texto ou escolha um método abaixo.');
+        return;
+      }
+      m = d.method;
+      if (d.method === 'doi') doiVal = d.value;
+      if (d.method === 'isbn') isbnVal = d.value;
+      if (d.method === 'url') urlVal = d.value;
+    }
+    if (m !== method) setMethod(m);
+    if (m === 'doi') setDoiInput(doiVal);
+    if (m === 'isbn') setIsbnInput(isbnVal);
+    if (m === 'url') setUrlInput(urlVal);
+    if (m === 'pdf' && pdfFile_ !== pdfFile) setPdfFile(pdfFile_);
+
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
       let extracted: Partial<ReferenceItem> = {};
 
-      if (method === 'doi') {
-        if (!doiInput.trim()) throw new Error('Digite o DOI.');
-        extracted = await fetchFromCrossRef(doiInput.trim());
-      } else if (method === 'isbn') {
-        if (!isbnInput.trim()) throw new Error('Digite o ISBN.');
-        extracted = await fetchFromOpenLibrary(isbnInput.trim());
-      } else if (method === 'url') {
-        if (!urlInput.trim()) throw new Error('Digite ou cole a URL.');
+      if (m === 'doi') {
+        if (!doiVal.trim()) throw new Error('Digite o DOI.');
+        extracted = await fetchFromCrossRef(doiVal.trim());
+      } else if (m === 'isbn') {
+        if (!isbnVal.trim()) throw new Error('Digite o ISBN.');
+        extracted = await fetchFromOpenLibrary(isbnVal.trim());
+      } else if (m === 'url') {
+        if (!urlVal.trim()) throw new Error('Digite ou cole a URL.');
         if (linkAttachment) {
           await deleteItemAttachments(itemId);
           setLinkAttachment(null);
           setPdfStoragePath(null);
         }
-        extracted = await requestMetadataFromUrl(urlInput.trim(), itemId);
+        extracted = await requestMetadataFromUrl(urlVal.trim(), itemId);
         const att = (extracted as any).attachment;
         delete (extracted as any).attachment;
         if (att?.storagePath) {
@@ -96,18 +135,18 @@ export const AddModal: React.FC<AddModalProps> = ({
           setPdfStoragePath(att.storagePath);
           onToast('PDF do link baixado e anexado');
         }
-      } else if (method === 'pdf') {
-        if (!pdfFile) throw new Error('Selecione um arquivo PDF.');
-        if (pdfFile.size > MAX_ATTACHMENT_SIZE) throw new Error('Arquivo excede o limite de 20 MB.');
+      } else if (m === 'pdf') {
+        if (!pdfFile_) throw new Error('Selecione um arquivo PDF.');
+        if (pdfFile_.size > MAX_ATTACHMENT_SIZE) throw new Error('Arquivo excede o limite de 20 MB.');
         let path = pdfStoragePath;
-        if (!path || pdfUploadedFile !== pdfFile) {
+        if (!path || pdfUploadedFile !== pdfFile_) {
           if (path) await deleteItemAttachments(itemId);
-          path = (await uploadItemAttachment(itemId, pdfFile)).storagePath;
+          path = (await uploadItemAttachment(itemId, pdfFile_)).storagePath;
           setPdfStoragePath(path);
-          setPdfUploadedFile(pdfFile);
+          setPdfUploadedFile(pdfFile_);
         }
         extracted = await requestMetadataFromPdf(path);
-      } else if (method === 'manual') {
+      } else if (m === 'manual') {
         extracted = {
           type: 'article',
           title: '',
@@ -121,7 +160,7 @@ export const AddModal: React.FC<AddModalProps> = ({
       delete (extracted as any).trace;
 
       // If URL is present, record access date at moment of addition
-      const effectiveUrl = extracted.url || (method === 'url' ? urlInput.trim() : undefined);
+      const effectiveUrl = extracted.url || (m === 'url' ? urlVal.trim() : undefined);
       const accessDate = effectiveUrl ? (extracted.accessDate || formatMonthAbbr()) : undefined;
 
       setFormData((prev) => ({
@@ -141,6 +180,25 @@ export const AddModal: React.FC<AddModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Entrada colada/arrastada na tela: começa a busca ao abrir (uma vez só, mesmo no StrictMode)
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || !initial || (!initial.value && !initial.file)) return;
+    autoStarted.current = true;
+    handleFetchMetadata(undefined, initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pickDroppedFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!PDF_FILE_RE.test(file.name)) {
+      setErrorMessage('Solte um arquivo PDF.');
+      return;
+    }
+    setPdfFile(file);
+    handleFetchMetadata(undefined, { method: 'pdf', file });
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
@@ -273,6 +331,7 @@ export const AddModal: React.FC<AddModalProps> = ({
   };
 
   const methodTabs = [
+    { id: 'auto' as AddMethod, label: 'Colar', icon: ClipboardPaste },
     { id: 'doi' as AddMethod, label: 'Por DOI', icon: FileCode },
     { id: 'isbn' as AddMethod, label: 'Por ISBN', icon: Book },
     { id: 'url' as AddMethod, label: 'Por URL', icon: Globe },
@@ -348,6 +407,68 @@ export const AddModal: React.FC<AddModalProps> = ({
             )}
 
             <form onSubmit={handleFetchMetadata} className="space-y-4 pt-2">
+              {method === 'auto' && (
+                <div
+                  className="space-y-1.5"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDragging(false);
+                    pickDroppedFile(e.dataTransfer.files?.[0]);
+                  }}
+                >
+                  <label htmlFor="auto-input" className="block text-[#57534E] font-medium font-sans">
+                    DOI, ISBN, link ou arXiv
+                  </label>
+                  <textarea
+                    id="auto-input"
+                    value={autoInput}
+                    onChange={(e) => setAutoInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleFetchMetadata();
+                      }
+                    }}
+                    rows={2}
+                    placeholder="Cole aqui. Também dá para soltar um PDF."
+                    className={`w-full bg-[#FAF7F2] border p-2.5 font-mono text-xs resize-none focus:outline-none focus:border-[#292524] ${
+                      isDragging ? 'border-[#292524] border-dashed bg-[#F2ECE1]' : 'border-[#E8DFD1]'
+                    }`}
+                    autoFocus
+                  />
+                  <p className="text-[11px] font-mono min-h-4" aria-live="polite">
+                    {autoInput.trim() ? (
+                      detected ? (
+                        <span className="text-[#292524]">
+                          Detectado: {detected.method === 'doi' ? 'DOI' : detected.method === 'isbn' ? 'ISBN' : /arxiv\.org/.test(detected.value) ? 'arXiv' : 'link'}{' '}
+                          <span className="text-[#78716C]">{detected.value}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[#A8A29E]">Ainda não reconhecido</span>
+                      )
+                    ) : (
+                      <span className="text-[#A8A29E]">Enter para buscar</span>
+                    )}
+                  </p>
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[#57534E] hover:text-[#292524] cursor-pointer underline underline-offset-2">
+                    <Upload size={12} />
+                    ou escolher um PDF
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => pickDroppedFile(e.target.files?.[0])}
+                    />
+                  </label>
+                </div>
+              )}
+
               {method === 'doi' && (
                 <div className="space-y-1.5">
                   <label className="block text-[#57534E] font-medium font-sans">

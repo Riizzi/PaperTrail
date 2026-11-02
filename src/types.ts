@@ -95,4 +95,4 @@ export interface OpenAlexWork {
   }>;
 }
 
-export type SortOption = 'createdAt_desc' | 'createdAt_asc' | 'year_desc' | 'year_asc' | 'author_asc' | 'title_asc';
+export type SortOption = 'relevance' | 'createdAt_desc' | 'createdAt_asc' | 'year_desc' | 'year_asc' | 'author_asc' | 'title_asc';

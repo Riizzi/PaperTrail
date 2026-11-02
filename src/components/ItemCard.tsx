@@ -11,6 +11,7 @@ import {
   Copy,
   Paperclip,
   StickyNote,
+  Check,
 } from 'lucide-react';
 import { formatReferenceABNT, copyABNTToClipboard } from '../services/abnt';
 
@@ -21,6 +22,10 @@ interface ItemCardProps {
   onCopyABNT: (text: string) => void;
   /** Aberto no painel de detalhe (computador) */
   isSelected?: boolean;
+  /** Modo seleção (ações em lote): o clique marca/desmarca em vez de abrir */
+  selectable?: boolean;
+  checked?: boolean;
+  onToggleCheck?: () => void;
 }
 
 export const ItemCard: React.FC<ItemCardProps> = ({
@@ -29,6 +34,9 @@ export const ItemCard: React.FC<ItemCardProps> = ({
   onToggleFavorite,
   onCopyABNT,
   isSelected = false,
+  selectable = false,
+  checked = false,
+  onToggleCheck,
 }) => {
   const getTypeLabel = (type: ReferenceItem['type']) => {
     switch (type) {
@@ -77,20 +85,35 @@ export const ItemCard: React.FC<ItemCardProps> = ({
 
   return (
     <article
-      onClick={onClick}
+      onClick={selectable ? onToggleCheck : onClick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && e.target === e.currentTarget) onClick();
+        if ((e.key === 'Enter' || (selectable && e.key === ' ')) && e.target === e.currentTarget) {
+          e.preventDefault();
+          (selectable ? onToggleCheck : onClick)?.();
+        }
       }}
+      aria-checked={selectable ? checked : undefined}
+      role={selectable ? 'checkbox' : undefined}
       tabIndex={0}
       data-item-id={item.id}
       aria-current={isSelected || undefined}
       className={`group relative bg-[#FFFDF9] border p-3.5 pt-3 transition-transform hover:-translate-y-0.5 cursor-pointer outline-none focus-visible:border-[#292524] ${
-        isSelected ? 'border-[#292524] shadow-[3px_3px_0_#292524] -translate-y-0.5' : 'border-[#E8DFD1] ledger-shadow'
+        isSelected || checked ? 'border-[#292524] shadow-[3px_3px_0_#292524] -translate-y-0.5' : 'border-[#E8DFD1] ledger-shadow'
       }`}
     >
       {/* Top Header */}
       <div className="flex items-center justify-between gap-2 border-b border-[#F0E9DF] pb-2 mb-2 text-xs">
         <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#57534E]">
+          {selectable && (
+            <span
+              aria-hidden="true"
+              className={`w-4 h-4 border flex items-center justify-center mr-0.5 ${
+                checked ? 'bg-[#292524] border-[#292524] text-[#FAF7F2]' : 'bg-[#FFFDF9] border-[#A8A29E]'
+              }`}
+            >
+              {checked && <Check size={11} strokeWidth={3} />}
+            </span>
+          )}
           {getTypeIcon(item.type)}
           <span className="font-semibold uppercase tracking-wider">{getTypeLabel(item.type)}</span>
           {item.year && (

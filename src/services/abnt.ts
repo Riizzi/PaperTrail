@@ -426,11 +426,18 @@ export function formatCollectionABNT(items: ReferenceItem[]): { html: string; pl
  * Export collection items to BibTeX format
  */
 export function exportToBibTeX(items: ReferenceItem[]): string {
+  const usedKeys = new Map<string, number>();
   return items.map(item => {
     const list = parseAuthorsList(item.authors);
-    const authorKey = list.length > 0 ? list[0].lastUpper.toLowerCase().replace(/[^a-z0-9]/g, '') : 'anon';
+    const authorKey = list.length > 0
+      ? list[0].lastUpper.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '') || 'anon'
+      : 'anon';
     const yearKey = item.year || 'nodate';
-    const citeKey = `${authorKey}${yearKey}`;
+    // Chaves repetidas quebram o LaTeX: silva2020, silva2020a, silva2020b...
+    const baseKey = `${authorKey}${yearKey}`;
+    const seen = usedKeys.get(baseKey) || 0;
+    usedKeys.set(baseKey, seen + 1);
+    const citeKey = seen ? `${baseKey}${String.fromCharCode(96 + seen)}` : baseKey;
 
     const bibAuthors = list.map(a => `${a.lastUpper}, ${a.given}`).join(' and ') || 'Anonymous';
     const type = item.type === 'book' ? 'book' : item.type === 'chapter' ? 'incollection' : item.type === 'thesis' ? 'phdthesis' : 'article';

@@ -250,7 +250,7 @@ export default async function handler(req: any, res: any) {
       if (typeof itemId === 'string' && /^[\w-]{1,128}$/.test(itemId) && page.bytes.length <= 20 * 1024 * 1024) {
         try {
           const rawName = decodeURIComponent(new URL(page.finalUrl).pathname.split('/').pop() || 'documento.pdf');
-          const safe = rawName.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'documento';
+          const safe = rawName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'documento';
           const path = `users/${uid}/items/${itemId}/${Date.now()}_${safe.toLowerCase().endsWith('.pdf') ? safe : safe + '.pdf'}`;
           await putAttachment(path, page.bytes, 'application/pdf');
           attachment = { storagePath: path, name: rawName, size: page.bytes.length, mimeType: 'application/pdf' };

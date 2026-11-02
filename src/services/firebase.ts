@@ -154,6 +154,18 @@ export async function logOut() {
   return await firebaseSignOut(auth);
 }
 
+/**
+ * Sem internet, o Firestore aplica a gravação no cache na hora e só confirma quando a conexão volta.
+ * Para a tela não ficar presa esperando, offline a promessa termina logo (a fila sincroniza depois).
+ */
+function commit(write: Promise<void>, path: string, op: OperationType): Promise<void> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    write.catch((err) => console.error('Falha ao sincronizar', path, err));
+    return Promise.resolve();
+  }
+  return write.catch((err) => handleFirestoreError(err, op, path));
+}
+
 // Firestore operations for References
 export function subscribeToUserItems(userId: string, onUpdate: (items: ReferenceItem[]) => void, onError?: (err: any) => void) {
   const colPath = `users/${userId}/items`;
@@ -178,12 +190,7 @@ export function subscribeToUserItems(userId: string, onUpdate: (items: Reference
 
 export async function saveUserItem(userId: string, item: ReferenceItem): Promise<void> {
   const docPath = `users/${userId}/items/${item.id}`;
-  try {
-    const cleaned = cleanUndefined(item);
-    await setDoc(doc(db, 'users', userId, 'items', item.id), cleaned);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, docPath);
-  }
+  return commit(setDoc(doc(db, 'users', userId, 'items', item.id), cleanUndefined(item)), docPath, OperationType.WRITE);
 }
 
 export async function deleteUserItem(userId: string, itemId: string): Promise<void> {
@@ -220,21 +227,12 @@ export function subscribeToUserCollections(userId: string, onUpdate: (cols: Coll
 
 export async function saveUserCollection(userId: string, colItem: Collection): Promise<void> {
   const docPath = `users/${userId}/collections/${colItem.id}`;
-  try {
-    const cleaned = cleanUndefined(colItem);
-    await setDoc(doc(db, 'users', userId, 'collections', colItem.id), cleaned);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, docPath);
-  }
+  return commit(setDoc(doc(db, 'users', userId, 'collections', colItem.id), cleanUndefined(colItem)), docPath, OperationType.WRITE);
 }
 
 export async function deleteUserCollection(userId: string, collectionId: string): Promise<void> {
   const docPath = `users/${userId}/collections/${collectionId}`;
-  try {
-    await deleteDoc(doc(db, 'users', userId, 'collections', collectionId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, docPath);
-  }
+  return commit(deleteDoc(doc(db, 'users', userId, 'collections', collectionId)), docPath, OperationType.DELETE);
 }
 
 // Texto completo extraído do anexo: users/{uid}/items/{itemId}/content/fulltext (+ partes extras)

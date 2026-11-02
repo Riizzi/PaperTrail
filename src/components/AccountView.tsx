@@ -9,18 +9,22 @@ import {
 } from '../services/firebase';
 import { Download, Upload, LogOut, Trash2, Database, HardDrive, AlertTriangle, X } from 'lucide-react';
 import Cl4pLinkCard from './Cl4pLinkCard';
+import { ImportExportCard } from './ImportExportCard';
+import type { ReferenceItem } from '../types';
 
 interface AccountViewProps {
   user: User;
   itemCount: number;
   collectionCount: number;
-  onToast: (msg: string) => void;
+  items: ReferenceItem[];
+  onToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const AccountView: React.FC<AccountViewProps> = ({
   user,
   itemCount,
   collectionCount,
+  items,
   onToast,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
@@ -182,6 +186,8 @@ export const AccountView: React.FC<AccountViewProps> = ({
           O cache persistente local está ativado. Sua biblioteca é salva no dispositivo para leitura e consulta mesmo sem conexão à internet. Ao reconectar, as alterações são sincronizadas.
         </p>
       </div>
+
+      <ImportExportCard userId={user.uid} items={items} onToast={onToast} />
 
       {/* Backup & Data Export/Import */}
       <div className="bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-4 space-y-3">

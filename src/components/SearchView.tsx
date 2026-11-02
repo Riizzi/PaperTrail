@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { ReferenceItem, SortOption, ReadingStatus, DocumentType } from '../types';
 import { ItemCard } from './ItemCard';
+import { scoreItem } from '../services/search';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 
 interface SearchViewProps {
@@ -19,7 +20,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   selectedItemId,
 }) => {
   const [queryText, setQueryText] = useState('');
-  const [sortOption, setSortOption] = useState<SortOption>('createdAt_desc');
+  const [sortOption, setSortOption] = useState<SortOption>('relevance');
   const [filterStatus, setFilterStatus] = useState<ReadingStatus | 'all'>('all');
   const [filterType, setFilterType] = useState<DocumentType | 'all'>('all');
   const [filterFavoriteOnly, setFilterFavoriteOnly] = useState(false);
@@ -36,35 +37,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
   // Filter & Sort
   const filteredItems = useMemo(() => {
-    const q = queryText.toLowerCase().trim();
+    const q = queryText.trim();
+    const scores = new Map<string, number>();
 
     return items
       .filter((item) => {
-        // Text query: title, subtitle, authors, year, tags, notes
+        // Busca sem acento por título, autores, ano, tags, DOI, resumo, palavras-chave e apontamentos
         if (q) {
-          const matchTitle = item.title?.toLowerCase().includes(q);
-          const matchSubtitle = item.subtitle?.toLowerCase().includes(q);
-          const matchAuthors = item.authors?.toLowerCase().includes(q);
-          const matchYear = item.year?.toLowerCase().includes(q);
-          const matchPublication = item.publication?.toLowerCase().includes(q);
-          const matchNotes = item.notes?.toLowerCase().includes(q);
-          const matchApontamentos = item.notesList?.some(
-            (n) => n.text?.toLowerCase().includes(q) || n.page?.toLowerCase().includes(q)
-          );
-          const matchTags = item.tags?.some((t) => t.toLowerCase().includes(q));
-
-          if (
-            !matchTitle &&
-            !matchSubtitle &&
-            !matchAuthors &&
-            !matchYear &&
-            !matchPublication &&
-            !matchNotes &&
-            !matchApontamentos &&
-            !matchTags
-          ) {
-            return false;
-          }
+          const score = scoreItem(item, q);
+          if (!score) return false;
+          scores.set(item.id, score);
         }
 
         // Reading status
@@ -91,6 +73,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
       })
       .sort((a, b) => {
         switch (sortOption) {
+          case 'relevance':
+            return q
+              ? (scores.get(b.id) || 0) - (scores.get(a.id) || 0)
+              : (b.createdAt || '').localeCompare(a.createdAt || '');
           case 'createdAt_desc':
             return (b.createdAt || '').localeCompare(a.createdAt || '');
           case 'createdAt_asc':
@@ -118,7 +104,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           value={queryText}
           onChange={(e) => setQueryText(e.target.value)}
           data-search-input
-          placeholder="Buscar por título, autor, ano, tag ou notas..."
+          placeholder="Título, autor, ano, tag, DOI, resumo ou apontamento"
           className="w-full bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-3 pl-9 text-xs font-sans text-[#292524] focus:outline-none focus:border-[#292524]"
           autoFocus
         />
@@ -146,6 +132,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               onChange={(e) => setSortOption(e.target.value as SortOption)}
               className="w-full bg-[#FAF7F2] border border-[#E8DFD1] p-1.5 text-xs font-mono text-[#292524]"
             >
+              <option value="relevance">Relevância (ou mais recentes, sem busca)</option>
               <option value="createdAt_desc">Data de adição (mais recentes)</option>
               <option value="createdAt_asc">Data de adição (mais antigos)</option>
               <option value="year_desc">Ano de publicação (mais recentes)</option>

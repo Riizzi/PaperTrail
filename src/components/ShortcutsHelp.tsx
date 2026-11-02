@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 
 const SHORTCUTS: [string[], string][] = [
   [['N'], 'Adicionar texto'],
+  [['Ctrl', 'V'], 'Colar DOI, ISBN ou link para adicionar'],
   [['/'], 'Buscar'],
   [['J', '↓'], 'Próximo texto da lista'],
   [['K', '↑'], 'Texto anterior'],

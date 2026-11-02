@@ -39,7 +39,7 @@ export function safeFileName(name: string): string {
   return (
     String(name || 'arquivo')
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(-120) || 'arquivo'
   );
