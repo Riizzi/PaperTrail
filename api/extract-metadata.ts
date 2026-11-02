@@ -20,13 +20,17 @@ import {
   isBotChallenge,
   wordpressLookup,
   stripTags,
+  pageText,
+  isAggregatorPublisher,
   type Meta,
 } from './_lib/metadata.js';
+import { isScieloUrl, scieloPid, scieloArticle, scieloJournal } from './_lib/scielo.js';
 
 /**
  * Metadados de PDF ou URL, com o objetivo de vir TUDO preenchido.
  *
- * 1. DOI -> CrossRef: base oficial; se já trouxer título, autores e ano, é a resposta.
+ * 1. Bases sem IA, juntas campo a campo: CrossRef (DOI), API do SciELO e metatags da página.
+ *    Se já trouxerem título, autores e ano, é a resposta (e não gasta cota de IA).
  * 2. Gemini lê o conteúdo (texto do PDF, texto da página ou a própria URL quando o site
  *    bloqueia robôs) e preenche todos os campos. O que foi lido sem IA vai junto como pista.
  * 3. Se a IA falhar, o app devolve o que conseguiu ler, com aviso para completar.
@@ -42,7 +46,11 @@ Regras:
 - publisher: editora ou instituição que publica. place: cidade de publicação, se constar.
 - type: article (periódico), book, chapter, thesis (tese, dissertação, TCC), conference (anais/evento), webpage (site, blog, notícia, working paper sem periódico também pode ser webpage).
 - volume, number, pages, edition, isbn, doi, institution, degree quando existirem.
-- abstract: o resumo original da obra, se houver.
+- abstract: o resumo original da obra, se houver, sem o rótulo "Resumo"/"Abstract" no início.
+- title: no idioma original da obra (não a tradução da página). Se houver subtítulo depois de ":", ponha-o em subtitle.
+- Nomes de pessoas com maiúsculas normais ("Paula, Ana Paula Paes de"), mesmo que a fonte esteja em CAIXA ALTA.
+- Páginas: em revistas com paginação eletrônica, use o identificador do artigo (ex.: e2025-0154).
+- Ignore menus, listas de outros artigos e referências bibliográficas da página: descreva só a obra principal.
 - Não invente: deixe vazio só o que realmente não aparece na fonte.`;
 
 const metadataSchema = {
@@ -142,6 +150,7 @@ function clean(meta: Meta): Meta {
       out[k] = v;
     }
   }
+  if (isAggregatorPublisher(out.publisher)) delete out.publisher;
   if (typeof out.authors === 'string') out.authors = out.authors.replace(/\s*,\s*e\s+|\s+e\s+(?=[A-ZÀ-Ý])/g, '; ');
   if (out.year) out.year = String(out.year).match(/\d{4}/)?.[0] || '';
   return out;
@@ -206,6 +215,131 @@ async function fetchTarget(target: string) {
   }
 }
 
+/**
+ * Junta as fontes campo a campo. Ordem de confiança: CrossRef > SciELO > revista > metatags da página.
+ * Editora e cidade vêm do SciELO/página, porque no CrossRef a "editora" do SciELO é a FapUNIFESP.
+ */
+function combine(src: { cr?: Meta | null; am?: Meta | null; journal?: Meta | null; tags?: Meta | null }, url: string): Meta {
+  const cr = clean(src.cr || {});
+  const am = clean(src.am || {});
+  const journal = clean(src.journal || {});
+  const tags = clean(src.tags || {});
+  const out = mergeMeta(cr, mergeMeta(am, mergeMeta(journal, tags)));
+  const pick = (...vals: Array<string | undefined>) => vals.find((v) => v) || '';
+  out.publisher = pick(am.publisher, journal.publisher, tags.publisher, cr.publisher);
+  out.place = pick(am.place, journal.place, cr.place, tags.place);
+  out.publication = pick(cr.publication, am.publication, journal.publication, tags.publication);
+  out.abstract = pick(am.abstract, cr.abstract, tags.abstract);
+  out.url = url;
+  return clean(out);
+}
+
+const safeDecode = (s: string) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
+/** Metadados de um link. `savePdf` guarda o PDF quando o link aponta direto para um arquivo. */
+export async function analyzeUrl(
+  target: string,
+  trace: Trace,
+  savePdf?: (bytes: Buffer, finalUrl: string) => Promise<Meta | undefined>
+): Promise<Meta> {
+  const scielo = isScieloUrl(target);
+  const pid = scielo ? scieloPid(target) : null;
+  const pdfLink = /[?&](format=pdf|script=sci_pdf)\b|\.pdf($|\?)/i.test(target);
+
+  // SciELO no formato antigo (?pid=): a API do SciELO responde mesmo quando o site recusa o acesso
+  let am: Meta | null = null;
+  if (pid) {
+    am = await scieloArticle(pid, new URL(target).hostname);
+    trace.push(`SciELO ${pid}: ${am ? 'dados pela API do SciELO' : 'não encontrado na API do SciELO'}`);
+  }
+
+  let doi = findDoi(safeDecode(target)) || am?.doi || '';
+  let cr = doi ? await crossrefLookup(doi) : null;
+  if (doi) trace.push(`DOI ${doi}: ${cr ? 'CrossRef ok' : 'não encontrado no CrossRef'}`);
+
+  if (!pdfLink && (cr || am)) {
+    const known = combine({ cr, am }, target);
+    if (isComplete(known)) return { ...known, source: cr ? 'doi' : 'scielo' };
+  }
+
+  let page: Awaited<ReturnType<typeof fetchTarget>> | null = null;
+  try {
+    page = await fetchTarget(target);
+    trace.push(`Página: HTTP ${page.status} ${page.contentType.split(';')[0]}`);
+  } catch (e) {
+    trace.push(`Página inacessível: ${(e as Error)?.message || 'erro'}`);
+  }
+
+  // Link direto para PDF: lê como PDF e guarda como anexo
+  if (page && (/application\/pdf/i.test(page.contentType) || page.bytes.subarray(0, 5).toString() === '%PDF-')) {
+    const { source, notice, ...fromPdf } = await analyzePdf(page.bytes, trace);
+    const journal = scielo && !am && fromPdf.issn ? await scieloJournal(fromPdf.issn) : null;
+    if (journal) trace.push('SciELO: editora e cidade pela revista');
+    const meta = am || journal ? { ...combine({ am, journal, tags: fromPdf }, target), source } : { ...fromPdf, source, notice };
+    const attachment = savePdf ? await savePdf(page.bytes, page.finalUrl) : undefined;
+    return { ...meta, url: target, attachment };
+  }
+
+  const html = page ? page.bytes.toString('utf-8') : '';
+  const blocked = !page || isBotChallenge(page.status, html) || page.status >= 400;
+  if (blocked && page) trace.push('Site recusou a leitura automática');
+  const tags: Meta = !blocked ? metaFromHtml(html, target) : { url: target, type: 'webpage' };
+  const { hasCitationTags, issn, ...tagMeta } = tags;
+
+  // DOI nas metatags -> CrossRef
+  if (!cr && tagMeta.doi && tagMeta.doi !== doi) {
+    doi = tagMeta.doi;
+    cr = await crossrefLookup(doi);
+    trace.push(`DOI ${doi} (na página): ${cr ? 'CrossRef ok' : 'não encontrado no CrossRef'}`);
+  }
+  // SciELO no formato novo: editora e cidade pela revista (ISSN)
+  const journalIssn = [issn, cr?.issn].filter((v) => typeof v === 'string' && v).join(',');
+  const journal = scielo && !am && journalIssn ? await scieloJournal(journalIssn) : null;
+  if (journal) trace.push('SciELO: editora e cidade pela revista');
+
+  const trusted = Boolean(cr || am || hasCitationTags);
+  const known = combine({ cr, am, journal, tags: tagMeta }, target);
+  if (trusted && isComplete(known)) return { ...known, source: cr ? 'doi' : am ? 'scielo' : 'tags' };
+
+  // Falta algo: a IA lê o texto da página, a API do WordPress ou a URL pelo Google
+  const wp = blocked ? await wordpressLookup(target) : null;
+  if (blocked) trace.push(wp ? 'WordPress: post encontrado' : 'WordPress: indisponível');
+  const { contentText: wpText, ...wpMeta } = wp || ({} as Meta);
+  const hints = clean(mergeMeta(known, wpMeta));
+
+  try {
+    let ai: Meta;
+    if (!blocked && html) {
+      ai = await aiFromText(`Página ${target}`, pageText(html), hints, trace);
+    } else if (wpText) {
+      ai = await aiFromText(`Post ${target} (título: ${wpMeta.title || ''})`, stripTags(wpText), hints, trace);
+    } else {
+      ai = await aiFromUrl(target, hints, trace);
+    }
+    const aiClean = clean(ai);
+    // O que veio de base confiável vale mais; a IA completa o resto
+    const merged = trusted ? mergeMeta(known, aiClean) : mergeMeta(aiClean, hints);
+    return { ...merged, url: target, source: 'ai', notice: missingNotice(merged) };
+  } catch (err) {
+    console.warn('IA indisponível (URL):', (err as Error)?.message);
+    return {
+      ...hints,
+      type: hints.type || 'webpage',
+      url: target,
+      source: 'tags',
+      notice: blocked
+        ? `O site recusou a leitura e a IA não respondeu (${aiErrorMessage(err, 'erro')}). Preencha na revisão.`
+        : `A IA não respondeu agora (${aiErrorMessage(err, 'erro')}). Confira e complete os campos.`,
+    };
+  }
+}
+
 export default async function handler(req: any, res: any) {
   const uid = await requireUser(req, res, { countQuota: true });
   if (!uid) return;
@@ -213,7 +347,8 @@ export default async function handler(req: any, res: any) {
   const { mode, url, storagePath, itemId } = req.body || {};
   const trace: Trace = [];
   // Toda resposta leva o registro das etapas (mostrado na revisão)
-  const reply = (status: number, data: Meta) => sendJson(res, status, { ...data, trace });
+  // issn é só de uso interno
+  const reply = (status: number, { issn: _issn, ...data }: Meta) => sendJson(res, status, { ...data, trace });
 
   try {
     if (mode === 'pdf') {
@@ -227,94 +362,20 @@ export default async function handler(req: any, res: any) {
     const target = cleanUrl(String(url || '').trim());
     if (isPrivateUrl(target)) return sendJson(res, 400, { error: 'URL inválida.' });
 
-    // DOI na própria URL
-    const doiInUrl = findDoi(decodeURIComponent(target));
-    if (doiInUrl) {
-      const cr = await crossrefLookup(doiInUrl);
-      trace.push(`DOI na URL: ${cr ? 'CrossRef ok' : 'não encontrado'}`);
-      if (cr && isComplete(cr)) return reply(200, { ...clean(cr), url: target, source: 'doi' });
-    }
-
-    let page: Awaited<ReturnType<typeof fetchTarget>> | null = null;
-    try {
-      page = await fetchTarget(target);
-      trace.push(`Página: HTTP ${page.status} ${page.contentType.split(';')[0]}`);
-    } catch (e) {
-      trace.push(`Página inacessível: ${(e as Error)?.message || 'erro'}`);
-    }
-
-    // Link direto para PDF: lê como PDF e guarda como anexo
-    if (page && (/application\/pdf/i.test(page.contentType) || page.bytes.subarray(0, 5).toString() === '%PDF-')) {
-      const meta = await analyzePdf(page.bytes, trace);
-      let attachment: Meta | undefined;
-      if (typeof itemId === 'string' && /^[\w-]{1,128}$/.test(itemId) && page.bytes.length <= 20 * 1024 * 1024) {
-        try {
-          const rawName = decodeURIComponent(new URL(page.finalUrl).pathname.split('/').pop() || 'documento.pdf');
-          const safe = rawName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'documento';
-          const path = `users/${uid}/items/${itemId}/${Date.now()}_${safe.toLowerCase().endsWith('.pdf') ? safe : safe + '.pdf'}`;
-          await putAttachment(path, page.bytes, 'application/pdf');
-          attachment = { storagePath: path, name: rawName, size: page.bytes.length, mimeType: 'application/pdf' };
-        } catch (e) {
-          console.warn('Não foi possível guardar o PDF do link:', e);
-        }
+    const meta = await analyzeUrl(target, trace, async (bytes, finalUrl) => {
+      if (typeof itemId !== 'string' || !/^[\w-]{1,128}$/.test(itemId) || bytes.length > 20 * 1024 * 1024) return undefined;
+      try {
+        const rawName = decodeURIComponent(new URL(finalUrl).pathname.split('/').filter(Boolean).pop() || 'documento.pdf');
+        const safe = rawName.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'documento';
+        const path = `users/${uid}/items/${itemId}/${Date.now()}_${safe.toLowerCase().endsWith('.pdf') ? safe : safe + '.pdf'}`;
+        await putAttachment(path, bytes, 'application/pdf');
+        return { storagePath: path, name: rawName, size: bytes.length, mimeType: 'application/pdf' };
+      } catch (e) {
+        console.warn('Não foi possível guardar o PDF do link:', e);
+        return undefined;
       }
-      return reply(200, { ...meta, url: target, attachment });
-    }
-
-    const html = page ? page.bytes.toString('utf-8') : '';
-    const blocked = !page || isBotChallenge(page.status, html) || page.status >= 400;
-    if (blocked && page) trace.push('Site bloqueou a leitura automática');
-    const tags: Meta = !blocked ? metaFromHtml(html, target) : { url: target, type: 'webpage' };
-    const { hasCitationTags, ...tagMeta } = tags;
-
-    // DOI nas metatags -> CrossRef
-    if (tagMeta.doi) {
-      const cr = await crossrefLookup(tagMeta.doi);
-      if (cr && isComplete(cr)) {
-        return reply(200, { ...mergeMeta(clean(cr), { abstract: tagMeta.abstract }), url: target, source: 'doi' });
-      }
-    }
-
-    // Página de periódico com metatags completas
-    if (hasCitationTags && isComplete(tagMeta)) return reply(200, { ...clean(tagMeta), source: 'tags' });
-
-    // Conteúdo para a IA: texto da página, ou API do WordPress, ou a URL aberta pelo Google
-    const wp = blocked ? await wordpressLookup(target) : null;
-    if (blocked) trace.push(wp ? 'WordPress: post encontrado' : 'WordPress: indisponível');
-    const { contentText: wpText, ...wpMeta } = wp || ({} as Meta);
-    const hints = clean(mergeMeta(tagMeta, wpMeta));
-
-    try {
-      let ai: Meta;
-      if (!blocked && html) {
-        const bodyText = html
-          .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-          .replace(/<style\b[\s\S]*?<\/style>/gi, '')
-          .replace(/<(nav|footer|header|aside)\b[\s\S]*?<\/\1>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .slice(0, 15000);
-        ai = await aiFromText(`Página ${target}`, bodyText, hints, trace);
-      } else if (wpText) {
-        ai = await aiFromText(`Post ${target} (título: ${wpMeta.title || ''})`, stripTags(wpText), hints, trace);
-      } else {
-        ai = await aiFromUrl(target, hints, trace);
-      }
-      const aiClean = clean(ai);
-      const merged = hasCitationTags ? mergeMeta(clean(tagMeta), aiClean) : mergeMeta(aiClean, hints);
-      return reply(200, { ...merged, url: target, source: 'ai', notice: missingNotice(merged) });
-    } catch (err) {
-      console.warn('IA indisponível (URL):', (err as Error)?.message);
-      return reply(200, {
-        ...hints,
-        type: hints.type || 'webpage',
-        url: target,
-        source: 'tags',
-        notice: blocked
-          ? 'O site bloqueou a leitura e a IA não respondeu agora. Tente de novo em instantes ou preencha na revisão.'
-          : `A IA não respondeu agora (${aiErrorMessage(err, 'erro')}). Confira e complete os campos.`,
-      });
-    }
+    });
+    return reply(200, meta);
   } catch (err: any) {
     console.error('Error in /api/extract-metadata:', err);
     return sendJson(res, 500, { error: aiErrorMessage(err, 'Erro ao extrair metadados.') });

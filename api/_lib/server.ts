@@ -43,6 +43,8 @@ async function getFallbackModels(primary: string): Promise<string[]> {
 }
 
 const isTransient = (msg: string) => /503|UNAVAILABLE|overloaded|429|RESOURCE_EXHAUSTED|quota|500|INTERNAL/i.test(msg);
+// Cota da chave acabou (plano/faturamento ou limite diário): esperar segundos não resolve
+const isQuotaOut = (msg: string) => /check your plan and billing|billing details|PerDay|per day|limit: 0/i.test(msg);
 const isModelGone = (msg: string) => /404|NOT_FOUND|no longer available|not supported for/i.test(msg);
 
 /**
@@ -81,7 +83,7 @@ export async function generate(
         const msg = String(lastErr?.message || '');
         trace?.push(`IA erro (${model}): ${msg.replace(/\s+/g, ' ').slice(0, 120)}`);
         if (controller.signal.aborted) throw lastErr;
-        if (isModelGone(msg)) break; // próximo modelo
+        if (isModelGone(msg) || isQuotaOut(msg)) break; // próximo modelo, sem esperar
         if (!isTransient(msg)) throw lastErr;
         if (attempt < waits.length && Date.now() + waits[attempt] < deadline) await sleep(waits[attempt]);
         else break; // próximo modelo
@@ -113,6 +115,7 @@ async function generateOnce(params: GenerateContentParameters, level: ThinkingLe
 /** Mensagem de erro curta e em português para falhas do Gemini */
 export function aiErrorMessage(err: any, fallback: string): string {
   const msg = String(err?.message || '');
+  if (isQuotaOut(msg)) return 'A cota da chave do Gemini acabou (plano ou limite diário). Veja o uso em aistudio.google.com.';
   if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return 'Limite de uso da IA atingido no momento. Tente de novo em alguns minutos.';
   if (/404|NOT_FOUND|no longer available/i.test(msg)) return 'Modelo de IA indisponível. Atualize a variável GEMINI_MODEL.';
   if (/API key|PERMISSION_DENIED|401|403/i.test(msg)) return 'Chave do Gemini inválida ou sem permissão.';

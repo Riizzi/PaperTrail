@@ -19,6 +19,7 @@ import { formatMonthAbbr } from '../services/abnt';
 import { saveItemFulltext } from '../services/firebase';
 import { uploadItemAttachment, deleteItemAttachments, MAX_ATTACHMENT_SIZE } from '../services/attachments';
 import { detectInput, PDF_FILE_RE } from '../services/detect';
+import { normalizeMetadata } from '../services/normalize';
 
 export type AddMethod = 'auto' | 'doi' | 'isbn' | 'url' | 'pdf' | 'manual';
 
@@ -153,6 +154,7 @@ export const AddModal: React.FC<AddModalProps> = ({
         };
       }
 
+      extracted = normalizeMetadata(extracted);
       const notice = (extracted as any).notice;
       setLookupInfo({ notice, source: (extracted as any).source, trace: (extracted as any).trace });
       delete (extracted as any).notice;

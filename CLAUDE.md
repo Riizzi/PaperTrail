@@ -33,6 +33,7 @@ Antes de dar uma tarefa por concluída: `npm test && npm run lint && npm run bui
   - `abnt.ts` — formatação ABNT NBR 6023:2018 **por código** (referência, citações, lista da coleção, BibTeX). Coberto por testes; mexeu aqui, rode `npm test` e adicione caso de teste.
   - `crossref.ts` (DOI), `openlibrary.ts` (ISBN, com Google Books de reserva), `openalex.ts` (textos relacionados) —
     APIs públicas chamadas do navegador via `http.ts` (`fetchJson` com prazo e nova tentativa).
+  - `normalize.ts` — acabamento dos metadados antes da revisão (nomes em CAIXA ALTA, subtítulo após ":", rótulo "Resumo").
   - `detect.ts` (o que foi colado: DOI/ISBN/arXiv/link), `bibio.ts` (BibTeX/RIS), `search.ts` (busca com pontuação). Todos com testes.
   - `letters.ts` — Cartinhas: `letterboxes/{uid}` guarda `writeKey`; a página `/cartinha#uid.chave` (`LetterWriter`,
     roteada em `main.tsx`, sem login) cria `letterboxes/{uid}/letters/{id}`. Quem valida a chave são as regras do Firestore.
@@ -43,7 +44,9 @@ Antes de dar uma tarefa por concluída: `npm test && npm run lint && npm run bui
   **Rota nova precisa ser registrada em `apiRoutes` no `vite.config.ts`**, senão dá 404 local.
   - `_lib/server.ts` — `generate()` (Gemini com retentativa, modelos reserva e prazo de 90 s),
     `requireUser()` (valida token, `ALLOWED_EMAILS` e limite diário de IA, em memória), funções do Blob (`putAttachment`, `downloadAttachment`, `signedAttachmentUrl`), `isOwnPath()`.
-  - `_lib/metadata.ts` — leitura de metadados de PDF/URL sem IA.
+  - `_lib/metadata.ts` — leitura de metadados de PDF/URL sem IA. `_lib/scielo.ts` — API ArticleMeta do SciELO
+    (editora, cidade, título no idioma original; funciona quando o site recusa o acesso).
+    Em `extract-metadata`, `combine()` junta CrossRef + SciELO + metatags campo a campo; a IA só entra se faltar título, autores ou ano.
   - `summarize`, `search-terms`, `extract-text`, `extract-metadata`, `storage`.
 - `scripts/migrate-supabase-to-blob.mjs` — migração única dos anexos antigos do Supabase (mesmos caminhos).
 

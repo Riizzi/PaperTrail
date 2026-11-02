@@ -69,9 +69,13 @@ export async function crossrefLookup(doi: string): Promise<Meta | null> {
       year: dateParts?.[0] ? String(dateParts[0]) : '',
       publication: m['container-title']?.[0] || '',
       publisher: m.publisher || '',
+      place: m['publisher-location'] || '',
       volume: m.volume ? String(m.volume) : '',
       number: m.issue ? String(m.issue) : '',
-      pages: m.page ? String(m.page) : '',
+      // revistas com paginação eletrônica (SciELO, PLOS) usam o número do artigo no lugar das páginas
+      pages: m.page ? String(m.page) : m['article-number'] ? String(m['article-number']) : '',
+      isbn: Array.isArray(m.ISBN) ? m.ISBN[0] : '',
+      issn: Array.isArray(m.ISSN) ? m.ISSN.join(',') : '', // uso interno (consulta da revista); não vai para o texto
       doi: m.DOI || doi,
       url: m.URL || `https://doi.org/${doi}`,
       abstract: m.abstract ? stripTags(m.abstract).replace(/^(Abstract|Resumo)\s*/i, '') : '',
@@ -109,6 +113,7 @@ export function metaFromHtml(html: string, url: string): Meta {
     pages: [get('citation_firstpage'), get('citation_lastpage')].filter(Boolean).join('-'),
     doi: get('citation_doi', 'dc.identifier').replace(/^doi:\s*/i, '').match(DOI_RE)?.[1] || '',
     isbn: get('citation_isbn'),
+    issn: get('citation_issn', 'prism.issn'),
     institution: get('citation_dissertation_institution'),
     abstract: get('citation_abstract', 'dc.description', 'description', 'og:description'),
     type: get('citation_journal_title') ? 'article'
@@ -119,6 +124,26 @@ export function metaFromHtml(html: string, url: string): Meta {
     url,
     hasCitationTags: Boolean(get('citation_title')),
   };
+}
+
+/** Editoras que aparecem no CrossRef mas só distribuem o DOI (a editora real está na revista) */
+export function isAggregatorPublisher(name: string | undefined): boolean {
+  return Boolean(name && /fapunifesp|^scielo\b|^crossref$/i.test(name.trim()));
+}
+
+/**
+ * Texto da página para a IA: só o conteúdo principal (article/main), sem menus, scripts e rodapés.
+ * Em páginas como as do SciELO o menu ocupa os primeiros milhares de caracteres.
+ */
+export function pageText(html: string, max = 15000): string {
+  let body = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|noscript|svg|form|select|button)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(nav|footer|header|aside)\b[\s\S]*?<\/\1>/gi, ' ');
+  const main =
+    body.match(/<article\b[^>]*>([\s\S]*)<\/article>/i)?.[1] || body.match(/<main\b[^>]*>([\s\S]*)<\/main>/i)?.[1];
+  if (main && stripTags(main).length > 500) body = main;
+  return decodeEntities(stripTags(body)).slice(0, max);
 }
 
 /** Leitura do PDF: texto das primeiras páginas, título pela maior fonte, propriedades do arquivo */
