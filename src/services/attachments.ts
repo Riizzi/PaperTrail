@@ -1,4 +1,3 @@
-import { upload } from '@vercel/blob/client';
 import { getAuthHeader } from './api';
 import { auth } from './firebase';
 
@@ -65,6 +64,7 @@ export async function uploadItemAttachment(
 
   const path = `users/${uid}/items/${itemId}/${Date.now()}_${safeFileName(file.name)}`;
   try {
+    const { upload } = await import('@vercel/blob/client');
     await upload(path, file, {
       access: 'private',
       handleUploadUrl: '/api/storage',

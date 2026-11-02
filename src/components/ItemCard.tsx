@@ -19,6 +19,8 @@ interface ItemCardProps {
   onClick: () => void;
   onToggleFavorite: (e: React.MouseEvent) => void;
   onCopyABNT: (text: string) => void;
+  /** Aberto no painel de detalhe (computador) */
+  isSelected?: boolean;
 }
 
 export const ItemCard: React.FC<ItemCardProps> = ({
@@ -26,6 +28,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
   onClick,
   onToggleFavorite,
   onCopyABNT,
+  isSelected = false,
 }) => {
   const getTypeLabel = (type: ReferenceItem['type']) => {
     switch (type) {
@@ -75,7 +78,15 @@ export const ItemCard: React.FC<ItemCardProps> = ({
   return (
     <article
       onClick={onClick}
-      className="group relative bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-3.5 pt-3 transition-transform hover:-translate-y-0.5 cursor-pointer"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.target === e.currentTarget) onClick();
+      }}
+      tabIndex={0}
+      data-item-id={item.id}
+      aria-current={isSelected || undefined}
+      className={`group relative bg-[#FFFDF9] border p-3.5 pt-3 transition-transform hover:-translate-y-0.5 cursor-pointer outline-none focus-visible:border-[#292524] ${
+        isSelected ? 'border-[#292524] shadow-[3px_3px_0_#292524] -translate-y-0.5' : 'border-[#E8DFD1] ledger-shadow'
+      }`}
     >
       {/* Top Header */}
       <div className="flex items-center justify-between gap-2 border-b border-[#F0E9DF] pb-2 mb-2 text-xs">

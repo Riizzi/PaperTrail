@@ -21,6 +21,10 @@ interface CollectionsViewProps {
   onSelectItem: (item: ReferenceItem) => void;
   onToggleFavorite: (e: React.MouseEvent, item: ReferenceItem) => void;
   onToast: (msg: string) => void;
+  /** Coleção aberta (controlada de fora, ex.: pela barra lateral) */
+  selectedCollectionId?: string | null;
+  onSelectCollection?: (id: string | null) => void;
+  selectedItemId?: string | null;
 }
 
 export const CollectionsView: React.FC<CollectionsViewProps> = ({
@@ -32,8 +36,14 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   onSelectItem,
   onToggleFavorite,
   onToast,
+  ...props
 }) => {
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const selectedCollectionId = props.selectedCollectionId !== undefined ? props.selectedCollectionId : internalSelectedId;
+  const setSelectedCollectionId = (id: string | null) => {
+    setInternalSelectedId(id);
+    props.onSelectCollection?.(id);
+  };
   const [isCreating, setIsCreating] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [newColDesc, setNewColDesc] = useState('');
@@ -217,6 +227,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                   onClick={() => onSelectItem(item)}
                   onToggleFavorite={(e) => onToggleFavorite(e, item)}
                   onCopyABNT={onToast}
+                  isSelected={props.selectedItemId === item.id}
                 />
               ))}
             </div>

@@ -281,10 +281,12 @@ export const AddModal: React.FC<AddModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[1px] p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/40 backdrop-blur-[1px] p-0 sm:p-4">
       <div 
-        className="w-full sm:max-w-xl bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow-md max-h-[92vh] flex flex-col overflow-hidden rounded-t-lg sm:rounded-none"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        role="dialog"
+        aria-label="Adicionar texto"
+        className="w-full sm:max-w-xl bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow-md h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8DFD1] bg-[#FAF7F2]">

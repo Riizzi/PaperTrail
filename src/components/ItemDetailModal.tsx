@@ -27,6 +27,9 @@ import {
 import { requestSummary, requestSearchTerms, requestExtractText } from '../services/api';
 import { searchOpenAlexWorks } from '../services/openalex';
 import { saveItemFulltext, deleteItemFulltext } from '../services/firebase';
+import { useShortcuts } from '../hooks/useShortcuts';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { PdfReader } from './PdfReader';
 import { uploadItemAttachment, deleteItemAttachment, openAttachment, MAX_ATTACHMENT_SIZE } from '../services/attachments';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -46,6 +49,10 @@ interface ItemDetailModalProps {
   onDeleteItem: (id: string) => Promise<void>;
   onToast: (msg: string) => void;
   onImportDoi: (doi: string) => void;
+  /** modal (celular) ou painel fixo à direita (computador) */
+  variant?: 'modal' | 'panel';
+  /** Atalhos C/F/E ativos (desligados quando outra janela está por cima) */
+  shortcutsEnabled?: boolean;
 }
 
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
@@ -56,8 +63,13 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   onDeleteItem,
   onToast,
   onImportDoi,
+  variant = 'modal',
+  shortcutsEnabled = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'edit'>('content');
+  const [readerOpen, setReaderOpen] = useState(false);
+  // Leitor embutido só com mouse/trackpad: no celular o PDF abre melhor no leitor do sistema
+  const canReadInline = useMediaQuery('(pointer: fine) and (min-width: 768px)');
   const [showCopyMenu, setShowCopyMenu] = useState(false);
 
   // Attachment & upload state
@@ -396,11 +408,42 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
 
   const fullABNT = formatReferenceABNT(item);
 
+  useShortcuts(
+    {
+      c: () => handleCopyOption('full'),
+      f: () => handleToggleFavorite(),
+      e: () => setActiveTab((t) => (t === 'content' ? 'edit' : 'content')),
+    },
+    shortcutsEnabled
+  );
+
+  const isPanel = variant === 'panel';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[1px] p-0 sm:p-4">
-      <div 
-        className="w-full sm:max-w-2xl bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow-md max-h-[92vh] flex flex-col overflow-hidden rounded-t-lg sm:rounded-none"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    <div
+      className={
+        isPanel
+          ? 'h-full flex flex-col'
+          : 'fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/40 backdrop-blur-[1px] p-0 sm:p-4'
+      }
+      onClick={isPanel ? undefined : (e) => e.target === e.currentTarget && onClose()}
+    >
+      {readerOpen && item.attachment && (
+        <PdfReader
+          storagePath={item.attachment.storagePath}
+          name={item.attachment.name}
+          onClose={() => setReaderOpen(false)}
+        />
+      )}
+      <div
+        role={isPanel ? 'region' : 'dialog'}
+        aria-label={item.title}
+        className={
+          isPanel
+            ? 'h-full bg-[#FFFDF9] flex flex-col overflow-hidden'
+            : 'w-full sm:max-w-2xl bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow-md h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden'
+        }
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingTop: isPanel ? undefined : 'env(safe-area-inset-top, 0px)' }}
       >
         {/* Top Header Bar */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8DFD1] bg-[#FAF7F2]">
@@ -774,6 +817,16 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      {canReadInline && /\.pdf$/i.test(item.attachment.storagePath) && (
+                        <button
+                          type="button"
+                          onClick={() => setReaderOpen(true)}
+                          className="ledger-btn-primary px-2.5 py-1 text-xs font-mono flex items-center gap-1"
+                        >
+                          <BookOpen size={12} />
+                          Ler aqui
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {

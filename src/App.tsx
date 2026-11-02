@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import type { User } from 'firebase/auth';
 import type { ReferenceItem, Collection } from './types';
 import {
@@ -21,6 +21,11 @@ import { AccountView } from './components/AccountView';
 import { cl4pCapturarDaUrl, cl4pPublicar } from './services/cl4pLink';
 import { montarResumoPaper } from './services/cl4pPaper';
 
+import { Sidebar } from './components/Sidebar';
+import { Logo } from './components/Logo';
+import { ShortcutsHelp } from './components/ShortcutsHelp';
+import { useIsDesktop } from './hooks/useMediaQuery';
+import { useShortcuts } from './hooks/useShortcuts';
 import { AuthView } from './components/AuthView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer, type ToastMessage } from './components/Toast';
@@ -56,6 +61,11 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState<ReferenceItem | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [prefilledDoi, setPrefilledDoi] = useState<string | undefined>(undefined);
+
+  const isDesktop = useIsDesktop();
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   // Library Filter state
   const [libraryFilterStatus, setLibraryFilterStatus] = useState<'all' | 'to_read' | 'reading' | 'read' | 'favorites'>('all');
@@ -178,6 +188,62 @@ export default function App() {
     return true;
   });
 
+  const openAdd = () => {
+    setPrefilledDoi(undefined);
+    setIsAddOpen(true);
+  };
+
+  const goToTab = (t: TabType) => {
+    if (t === 'add') return openAdd();
+    if (t === 'collections') setActiveCollectionId(null);
+    setCurrentTab(t);
+    mainRef.current?.scrollTo({ top: 0 });
+  };
+
+  /** Anda pela lista que está na tela (a ordem vem do próprio DOM, vale para qualquer aba) */
+  const moveSelection = (delta: 1 | -1) => {
+    const cards = Array.from(mainRef.current?.querySelectorAll<HTMLElement>('[data-item-id]') || []);
+    if (!cards.length) return;
+    const ids = cards.map((c) => c.dataset.itemId!);
+    const current = selectedItem ? ids.indexOf(selectedItem.id) : -1;
+    const nextIndex =
+      current === -1 ? (delta === 1 ? 0 : ids.length - 1) : Math.min(ids.length - 1, Math.max(0, current + delta));
+    const next = items.find((i) => i.id === ids[nextIndex]);
+    if (!next) return;
+    setSelectedItem(next);
+    cards[nextIndex].scrollIntoView({ block: 'nearest' });
+    cards[nextIndex].focus({ preventScroll: true });
+  };
+
+  const overlayOpen = isAddOpen || showShortcuts;
+
+  useShortcuts(
+    {
+      Escape: () => {
+        if (showShortcuts) setShowShortcuts(false);
+        else if (isAddOpen) {
+          setIsAddOpen(false);
+          setPrefilledDoi(undefined);
+        } else if (selectedItem) setSelectedItem(null);
+      },
+      ...(overlayOpen
+        ? {}
+        : {
+            n: openAdd,
+            '/': () => {
+              if (currentTab === 'search') document.querySelector<HTMLInputElement>('[data-search-input]')?.focus();
+              else goToTab('search');
+            },
+            '?': () => setShowShortcuts(true),
+            j: () => moveSelection(1),
+            k: () => moveSelection(-1),
+            ArrowDown: () => moveSelection(1),
+            ArrowUp: () => moveSelection(-1),
+          }),
+    },
+    !!currentUser
+  );
+
   const modalFallback = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px]">
       <div className="bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-4 font-mono text-xs flex items-center gap-2">
@@ -207,65 +273,66 @@ export default function App() {
     );
   }
 
+  const detailProps = selectedItem
+    ? {
+        item: selectedItem,
+        collections,
+        onClose: () => setSelectedItem(null),
+        onUpdateItem: handleSaveItem,
+        onDeleteItem: handleDeleteItem,
+        onToast: showToast,
+        onImportDoi: handleImportDoiFromRelated,
+        shortcutsEnabled: !overlayOpen,
+      }
+    : null;
+
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#292524] flex flex-col font-sans">
+    <div className="min-h-[100dvh] bg-[#FAF7F2] text-[#292524] font-sans lg:flex">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Retro Ledger Top Header */}
-      <header
-        className="sticky top-0 z-30 bg-[#FFFDF9] border-b border-[#E8DFD1] ledger-shadow"
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-      >
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-          {/* Logo & Identity */}
-          <div
-            onClick={() => setCurrentTab('library')}
-            className="flex items-center gap-2.5 cursor-pointer select-none"
-          >
-            <div className="w-8 h-8 rounded-sm bg-[#D6CFC4] border border-[#292524] flex items-center justify-center ledger-shadow-sm">
-              <svg width="20" height="20" viewBox="0 0 512 512" fill="none">
-                <rect width="512" height="512" fill="#D6CFC4" />
-                <path d="M 180 120 L 310 120 L 370 180 L 370 340 L 180 340 Z" fill="#EBE5DC" stroke="#1C1917" strokeWidth="24" strokeLinejoin="round" />
-                <path d="M 310 120 L 310 180 L 370 180" fill="#D6CFC4" stroke="#1C1917" strokeWidth="24" strokeLinejoin="round" />
-                <line x1="220" y1="210" x2="330" y2="210" stroke="#1C1917" strokeWidth="18" strokeLinecap="round" />
-                <line x1="220" y1="250" x2="310" y2="250" stroke="#1C1917" strokeWidth="18" strokeLinecap="round" />
-                <path d="M 275 340 C 275 390, 220 400, 200 430 C 185 450, 195 470, 240 460 C 290 450, 340 430, 360 460" stroke="#1C1917" strokeWidth="20" strokeLinecap="round" strokeDasharray="6 24" />
-              </svg>
-            </div>
-            <div>
-              <span className="font-mono font-bold text-sm text-[#292524] tracking-tight block leading-tight">
-                PaperTrail
-              </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#78716C] block leading-tight">
-                Referências
-              </span>
-            </div>
-          </div>
+      <Sidebar
+        currentTab={currentTab}
+        onSelectTab={goToTab}
+        onAdd={openAdd}
+        onShowShortcuts={() => setShowShortcuts(true)}
+        items={items}
+        collections={collections}
+        activeCollectionId={currentTab === 'collections' ? activeCollectionId : null}
+        onOpenCollection={(id) => {
+          setActiveCollectionId(id);
+          setCurrentTab('collections');
+          mainRef.current?.scrollTo({ top: 0 });
+        }}
+      />
 
-          {/* Header Action Button */}
-          <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0 flex flex-col lg:flex-row lg:h-[100dvh]">
+        {/* Cabeçalho do celular/tablet (no computador fica a barra lateral) */}
+        <header
+          className="lg:hidden sticky top-0 z-30 bg-[#FFFDF9] border-b border-[#E8DFD1] ledger-shadow"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
+          <div className="max-w-md md:max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+            <Logo onClick={() => goToTab('library')} />
             <button
-              onClick={() => {
-                setPrefilledDoi(undefined);
-                setIsAddOpen(true);
-              }}
+              onClick={openAdd}
               className="ledger-btn-primary px-2.5 py-1 text-xs font-mono flex items-center gap-1 min-h-[36px]"
             >
               <Plus size={13} strokeWidth={2.2} />
               <span>Adicionar texto</span>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-3 pb-24">
+        {/* Main View Area */}
+        <main ref={mainRef} className="flex-1 min-w-0 lg:overflow-y-auto">
+          <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto w-full px-4 lg:px-8 pt-3 lg:pt-8 pb-24 lg:pb-12">
         {/* PWA Install Notice */}
         <PWAInstallBanner />
 
         {/* Tab Content */}
         {currentTab === 'library' && (
           <div className="space-y-3.5">
+            <h1 className="hidden lg:block font-mono text-lg font-bold tracking-tight">Biblioteca</h1>
             {/* Folder Tab Filter Bar */}
             <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-1 overflow-x-auto gap-1 text-xs font-mono">
               <div className="flex gap-1">
@@ -311,10 +378,7 @@ export default function App() {
                   Importe artigos por DOI, ISBN, URL, PDF ou adicione manualmente.
                 </p>
                 <button
-                  onClick={() => {
-                    setPrefilledDoi(undefined);
-                    setIsAddOpen(true);
-                  }}
+                  onClick={openAdd}
                   className="ledger-btn px-3 py-1.5 text-xs font-mono mt-2 inline-flex items-center gap-1.5"
                 >
                   <Plus size={13} />
@@ -330,25 +394,11 @@ export default function App() {
                     onClick={() => setSelectedItem(item)}
                     onToggleFavorite={(e) => handleToggleFavorite(e, item)}
                     onCopyABNT={showToast}
+                    isSelected={isDesktop && selectedItem?.id === item.id}
                   />
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {currentTab === 'add' && (
-          <div className="pt-2">
-            <Suspense fallback={modalFallback}>
-              <AddModal
-                userId={currentUser.uid}
-                collections={collections}
-                prefilledDoi={prefilledDoi}
-                onClose={() => setCurrentTab('library')}
-                onSave={handleSaveItem}
-                onToast={showToast}
-              />
-            </Suspense>
           </div>
         )}
 
@@ -366,6 +416,9 @@ export default function App() {
             onSelectItem={(item) => setSelectedItem(item)}
             onToggleFavorite={handleToggleFavorite}
             onToast={showToast}
+            selectedCollectionId={activeCollectionId}
+            onSelectCollection={setActiveCollectionId}
+            selectedItemId={isDesktop ? selectedItem?.id : null}
           />
         )}
 
@@ -375,6 +428,7 @@ export default function App() {
             onSelectItem={(item) => setSelectedItem(item)}
             onToggleFavorite={handleToggleFavorite}
             onToast={showToast}
+            selectedItemId={isDesktop ? selectedItem?.id : null}
           />
         )}
 
@@ -386,21 +440,23 @@ export default function App() {
             onToast={showToast}
           />
         )}
-      </main>
+          </div>
+        </main>
 
-      {/* Bottom Tab Bar Navigation */}
-      <Navigation
-        currentTab={currentTab}
-        onSelectTab={(t) => {
-          if (t === 'add') {
-            setPrefilledDoi(undefined);
-            setIsAddOpen(true);
-          } else {
-            setCurrentTab(t);
-          }
-        }}
-        itemCount={items.length}
-      />
+        {/* Painel de detalhe (computador) */}
+        {isDesktop && detailProps && (
+          <aside className="w-[440px] xl:w-[520px] 2xl:w-[600px] shrink-0 h-[100dvh] border-l border-[#E8DFD1] bg-[#FFFDF9]">
+            <Suspense fallback={<div className="p-6 text-xs font-mono text-[#78716C]">Carregando...</div>}>
+              <ItemDetailModal key={detailProps.item.id} variant="panel" {...detailProps} />
+            </Suspense>
+          </aside>
+        )}
+      </div>
+
+      {/* Barra de abas (celular/tablet) */}
+      <div className="lg:hidden">
+        <Navigation currentTab={currentTab} onSelectTab={goToTab} itemCount={items.length} />
+      </div>
 
       {/* Floating Add Modal */}
       {isAddOpen && (
@@ -419,20 +475,14 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* Detail Modal */}
-      {selectedItem && (
+      {/* Detalhe em tela cheia (celular/tablet) */}
+      {!isDesktop && detailProps && (
         <Suspense fallback={modalFallback}>
-          <ItemDetailModal
-            item={selectedItem}
-            collections={collections}
-            onClose={() => setSelectedItem(null)}
-            onUpdateItem={handleSaveItem}
-            onDeleteItem={handleDeleteItem}
-            onToast={showToast}
-            onImportDoi={handleImportDoiFromRelated}
-          />
+          <ItemDetailModal key={detailProps.item.id} variant="modal" {...detailProps} />
         </Suspense>
       )}
+
+      {showShortcuts && <ShortcutsHelp onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }

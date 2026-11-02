@@ -8,6 +8,7 @@ interface SearchViewProps {
   onSelectItem: (item: ReferenceItem) => void;
   onToggleFavorite: (e: React.MouseEvent, item: ReferenceItem) => void;
   onToast: (msg: string) => void;
+  selectedItemId?: string | null;
 }
 
 export const SearchView: React.FC<SearchViewProps> = ({
@@ -15,6 +16,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   onSelectItem,
   onToggleFavorite,
   onToast,
+  selectedItemId,
 }) => {
   const [queryText, setQueryText] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('createdAt_desc');
@@ -115,6 +117,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           type="text"
           value={queryText}
           onChange={(e) => setQueryText(e.target.value)}
+          data-search-input
           placeholder="Buscar por título, autor, ano, tag ou notas..."
           className="w-full bg-[#FFFDF9] border border-[#E8DFD1] ledger-shadow p-3 pl-9 text-xs font-sans text-[#292524] focus:outline-none focus:border-[#292524]"
           autoFocus
@@ -268,6 +271,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               onClick={() => onSelectItem(item)}
               onToggleFavorite={(e) => onToggleFavorite(e, item)}
               onCopyABNT={onToast}
+              isSelected={selectedItemId === item.id}
             />
           ))
         )}
