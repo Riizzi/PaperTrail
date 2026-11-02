@@ -12,7 +12,7 @@
  */
 import { put, head } from '@vercel/blob';
 
-const BASE = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+const BASE = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BUCKET = 'attachments';
 
