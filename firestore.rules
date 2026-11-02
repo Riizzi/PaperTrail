@@ -37,6 +37,30 @@ service cloud.firestore {
       }
     }
 
+    // Cartinhas: caixa de cada usuário. Quem tem o link (uid + writeKey) cria cartinhas
+    // sem login; só a dona da caixa lê, marca como lida e apaga.
+    match /letterboxes/{ownerId} {
+      allow read, write: if isOwner(ownerId);
+
+      match /letters/{letterId} {
+        allow read, delete: if isOwner(ownerId);
+        // a dona só pode marcar como lida
+        allow update: if isOwner(ownerId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+        allow create: if isValidId(letterId)
+          && request.resource.data.keys().hasOnly(['text', 'from', 'color', 'key', 'createdAt'])
+          && request.resource.data.key is string
+          && exists(/databases/$(database)/documents/letterboxes/$(ownerId))
+          && request.resource.data.key == get(/databases/$(database)/documents/letterboxes/$(ownerId)).data.writeKey
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && (!('from' in request.resource.data) || (request.resource.data.from is string && request.resource.data.from.size() <= 60))
+          && request.resource.data.color in ['amarelo', 'rosa', 'azul', 'verde']
+          && request.resource.data.createdAt == request.time;
+      }
+    }
+
     // Collections
     match /users/{userId}/collections/{collectionId} {
       allow read: if isOwner(userId);

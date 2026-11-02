@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import type { User } from 'firebase/auth';
-import type { ReferenceItem, Collection, ReadingStatus } from './types';
+import type { ReferenceItem, Collection, ReadingStatus, Letter } from './types';
 import {
   auth,
   subscribeToUserItems,
@@ -18,6 +18,9 @@ import { ItemCard } from './components/ItemCard';
 import { CollectionsView } from './components/CollectionsView';
 import { SearchView } from './components/SearchView';
 import { AccountView } from './components/AccountView';
+import { LettersView } from './components/LettersView';
+import { LetterNote } from './components/LetterNote';
+import { subscribeToLetters } from './services/letters';
 import { cl4pCapturarDaUrl, cl4pPublicar } from './services/cl4pLink';
 import { montarResumoPaper } from './services/cl4pPaper';
 
@@ -56,6 +59,8 @@ export default function App() {
   const [items, setItems] = useState<ReferenceItem[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [letters, setLetters] = useState<Letter[]>([]);
+  const unreadLetters = letters.filter((l) => !l.readAt);
 
   // Envia o resumo da biblioteca ao hub CL4P-RZ quando os dados mudam
   useEffect(() => {
@@ -129,6 +134,7 @@ export default function App() {
     if (!currentUser) {
       setItems([]);
       setCollections([]);
+      setLetters([]);
       setIsDataLoading(false);
       return;
     }
@@ -157,9 +163,12 @@ export default function App() {
       }
     );
 
+    const unsubLetters = subscribeToLetters(currentUser.uid, setLetters);
+
     return () => {
       unsubItems();
       unsubCols();
+      unsubLetters();
     };
   }, [currentUser]);
 
@@ -428,6 +437,7 @@ export default function App() {
         items={items}
         collections={collections}
         activeCollectionId={currentTab === 'collections' ? activeCollectionId : null}
+        unreadLetters={unreadLetters.length}
         onOpenCollection={(id) => {
           setActiveCollectionId(id);
           setCurrentTab('collections');
@@ -467,6 +477,20 @@ export default function App() {
         {/* Tab Content */}
         {currentTab === 'library' && (
           <div className="space-y-3.5">
+            {unreadLetters.length > 0 && (
+              <button onClick={() => goToTab('letters')} className="block w-full text-left pt-2 pb-1" aria-label="Abrir cartinhas">
+                <LetterNote color={unreadLetters[0].color} tilt={-0.8}>
+                  <span className="absolute top-1.5 right-2 font-mono text-[9px] font-bold uppercase tracking-wider bg-[#292524] text-[#FAF7F2] px-1">
+                    {unreadLetters.length === 1 ? 'nova cartinha' : `${unreadLetters.length} cartinhas novas`}
+                  </span>
+                  <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words line-clamp-4">{unreadLetters[0].text}</p>
+                  <p className="mt-2 flex justify-between font-mono text-[11px] text-[#57534E]">
+                    <span className="underline underline-offset-2">abrir</span>
+                    {unreadLetters[0].from && <span>— {unreadLetters[0].from}</span>}
+                  </p>
+                </LetterNote>
+              </button>
+            )}
             <div className="flex items-center gap-2">
               <h1 className="hidden lg:block font-mono text-lg font-bold tracking-tight mr-auto">Biblioteca</h1>
               <label htmlFor="lib-sort" className="sr-only">Ordenar</label>
@@ -606,6 +630,10 @@ export default function App() {
           />
         )}
 
+        {currentTab === 'letters' && (
+          <LettersView userId={currentUser.uid} letters={letters} onToast={showToast} />
+        )}
+
         {currentTab === 'account' && (
           <AccountView
             user={currentUser}
@@ -630,7 +658,7 @@ export default function App() {
 
       {/* Barra de abas (celular/tablet) */}
       <div className="lg:hidden">
-        <Navigation currentTab={currentTab} onSelectTab={goToTab} itemCount={items.length} />
+        <Navigation currentTab={currentTab} onSelectTab={goToTab} itemCount={items.length} unreadLetters={unreadLetters.length} />
       </div>
 
       {/* Floating Add Modal */}

@@ -1,26 +1,22 @@
 import React from 'react';
-import { BookMarked, PlusSquare, FolderTree, Search, User } from 'lucide-react';
+import { BookMarked, Mail, FolderTree, Search, User } from 'lucide-react';
 
-export type TabType = 'library' | 'add' | 'collections' | 'search' | 'account';
+export type TabType = 'library' | 'add' | 'collections' | 'search' | 'letters' | 'account';
 
 interface NavigationProps {
   currentTab: TabType;
   onSelectTab: (tab: TabType) => void;
   itemCount?: number;
+  unreadLetters?: number;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab, itemCount = 0 }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab, itemCount = 0, unreadLetters = 0 }) => {
   const tabs = [
     {
       id: 'library' as TabType,
       label: 'Biblioteca',
       icon: BookMarked,
       badge: itemCount > 0 ? String(itemCount) : undefined,
-    },
-    {
-      id: 'add' as TabType,
-      label: 'Adicionar',
-      icon: PlusSquare,
     },
     {
       id: 'collections' as TabType,
@@ -31,6 +27,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab,
       id: 'search' as TabType,
       label: 'Buscar',
       icon: Search,
+    },
+    {
+      id: 'letters' as TabType,
+      label: 'Cartinhas',
+      icon: Mail,
+      badge: unreadLetters > 0 ? String(unreadLetters) : undefined,
     },
     {
       id: 'account' as TabType,

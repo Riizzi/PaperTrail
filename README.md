@@ -34,6 +34,7 @@ Installable as a PWA on iPhone (Safari → Share → Add to Home Screen) and And
 - **Bulk actions**: change status, add to a collection, copy the ABNT list or delete several readings
 - **Import from Zotero/Mendeley** (BibTeX or RIS, skipping duplicates) and export to BibTeX, RIS or JSON
 - **Desktop layout**: sidebar, list and open reading side by side, built-in PDF reader and keyboard shortcuts (`?` shows them)
+- **Cartinhas** (little notes): a secret link (/cartinha) lets someone leave messages without an account; they show up as sticky notes in the app
 - Multi-device sync and offline use
 
 ## Tech stack

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookMarked, FolderTree, Search, User, Plus, Folder, Keyboard } from 'lucide-react';
+import { BookMarked, FolderTree, Search, User, Plus, Folder, Keyboard, Mail } from 'lucide-react';
 import type { Collection, ReferenceItem } from '../types';
 import type { TabType } from './Navigation';
 import { Logo } from './Logo';
@@ -13,6 +13,7 @@ interface SidebarProps {
   collections: Collection[];
   activeCollectionId: string | null;
   onOpenCollection: (id: string) => void;
+  unreadLetters: number;
 }
 
 const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -31,11 +32,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collections,
   activeCollectionId,
   onOpenCollection,
+  unreadLetters,
 }) => {
-  const nav: { id: TabType; label: string; icon: typeof BookMarked; count?: number; key?: string }[] = [
+  const nav: { id: TabType; label: string; icon: typeof BookMarked; count?: number; key?: string; badge?: number }[] = [
     { id: 'library', label: 'Biblioteca', icon: BookMarked, count: items.length },
     { id: 'search', label: 'Buscar', icon: Search, key: '/' },
     { id: 'collections', label: 'Coleções', icon: FolderTree, count: collections.length },
+    { id: 'letters', label: 'Cartinhas', icon: Mail, badge: unreadLetters },
     { id: 'account', label: 'Conta', icon: User },
   ];
 
@@ -59,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <nav aria-label="Navegação principal" className="px-2 space-y-0.5">
-        {nav.map(({ id, label, icon: Icon, count, key }) => {
+        {nav.map(({ id, label, icon: Icon, count, key, badge }) => {
           const active = currentTab === id && !(id === 'collections' && activeCollectionId);
           return (
             <button
@@ -75,6 +78,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
               <span className="flex-1 text-left">{label}</span>
               {count !== undefined && <span className="font-mono text-[11px] text-[#A8A29E]">{count}</span>}
+              {!!badge && (
+                <span className="font-mono text-[10px] font-bold px-1.5 bg-[#292524] text-[#FAF7F2]" aria-label={`${badge} não lidas`}>
+                  {badge}
+                </span>
+              )}
               {key && <Kbd>{key}</Kbd>}
             </button>
           );

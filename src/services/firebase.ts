@@ -328,9 +328,14 @@ export async function deleteAllUserDataAndAccount(user: User): Promise<void> {
   const itemsSnap = await getDocs(collection(db, 'users', userId, 'items'));
   const colsSnap = await getDocs(collection(db, 'users', userId, 'collections'));
 
+  const lettersSnap = await getDocs(collection(db, 'letterboxes', userId, 'letters')).catch(() => null);
+
   const allDocRefs = [
     ...itemsSnap.docs.map(d => d.ref),
     ...colsSnap.docs.map(d => d.ref),
+    // Cartinhas recebidas e a caixa (o link para de funcionar)
+    ...(lettersSnap?.docs.map(d => d.ref) || []),
+    doc(db, 'letterboxes', userId),
   ];
 
   // Also include subcollections content/fulltext

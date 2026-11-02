@@ -34,6 +34,8 @@ Antes de dar uma tarefa por concluída: `npm test && npm run lint && npm run bui
   - `crossref.ts` (DOI), `openlibrary.ts` (ISBN, com Google Books de reserva), `openalex.ts` (textos relacionados) —
     APIs públicas chamadas do navegador via `http.ts` (`fetchJson` com prazo e nova tentativa).
   - `detect.ts` (o que foi colado: DOI/ISBN/arXiv/link), `bibio.ts` (BibTeX/RIS), `search.ts` (busca com pontuação). Todos com testes.
+  - `letters.ts` — Cartinhas: `letterboxes/{uid}` guarda `writeKey`; a página `/cartinha#uid.chave` (`LetterWriter`,
+    roteada em `main.tsx`, sem login) cria `letterboxes/{uid}/letters/{id}`. Quem valida a chave são as regras do Firestore.
   - Textos relacionados: os termos da IA ficam em `item.relatedTerms` para não gastar cota a cada abertura.
   - `cl4pLink.ts` + `cl4pPaper.ts` — envio de um resumo da biblioteca para o hub pessoal CL4P-RZ (só quando vinculado).
     `cl4pLink.ts` é igual nos outros apps (RetroFin, SmartPantry etc.); mudanças nele devem valer para todos.

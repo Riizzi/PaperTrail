@@ -98,3 +98,15 @@ export interface OpenAlexWork {
 }
 
 export type SortOption = 'relevance' | 'createdAt_desc' | 'createdAt_asc' | 'year_desc' | 'year_asc' | 'author_asc' | 'title_asc';
+
+export type LetterColor = 'amarelo' | 'rosa' | 'azul' | 'verde';
+
+/** Cartinha deixada pelo link de cartinhas (letterboxes/{uid}/letters/{id}) */
+export interface Letter {
+  id: string;
+  text: string;
+  from?: string;
+  color: LetterColor;
+  createdAt: string;
+  readAt?: string;
+}

@@ -32,6 +32,7 @@ Funciona como PWA: no iPhone (Safari → Compartilhar → Adicionar à Tela de I
 - **Ações em lote**: mudar status, pôr em coleção, copiar a lista ABNT ou excluir vários textos
 - **Importar do Zotero/Mendeley** (BibTeX ou RIS, pulando duplicados) e exportar em BibTeX, RIS ou JSON
 - **Computador**: barra lateral, lista e texto aberto lado a lado, leitor de PDF embutido e atalhos de teclado (`?` mostra a lista)
+- **Cartinhas**: um link secreto (/cartinha) para alguém deixar recados sem precisar de conta; aparecem como post-its no app
 - Sincronização entre aparelhos e uso offline
 
 ## Stack
