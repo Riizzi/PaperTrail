@@ -11,7 +11,7 @@ A mobile-first academic reference manager inspired by Zotero. It stores your rea
 ![React](https://img.shields.io/badge/React_19-292524?logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-292524?logo=typescript&logoColor=3178C6)
 ![Firebase](https://img.shields.io/badge/Firebase-292524?logo=firebase&logoColor=FFCA28)
-![Supabase](https://img.shields.io/badge/Supabase-292524?logo=supabase&logoColor=3FCF8E)
+![Vercel Blob](https://img.shields.io/badge/Vercel%20Blob-292524?logo=vercel&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini_API-292524?logo=googlegemini&logoColor=8E75B2)
 ![Vercel](https://img.shields.io/badge/Vercel-292524?logo=vercel&logoColor=white)
 
@@ -40,7 +40,7 @@ Installable as a PWA on iPhone (Safari → Share → Add to Home Screen) and And
 |---|---|
 | UI | React 19, TypeScript, Vite, Tailwind CSS 4, PWA (vite-plugin-pwa) |
 | Auth & data | Firebase Authentication + Cloud Firestore (offline cache) |
-| Attachments | Supabase Storage (private bucket, signed URLs) |
+| Attachments | Vercel Blob (private store, signed URLs) |
 | AI | Gemini (`@google/genai`) with structured JSON output |
 | Backend | Vercel serverless functions in `/api` |
 
@@ -52,7 +52,7 @@ Every service fits in a free tier, with no credit card required.
 Browser (PWA)
  ├─ Firebase Auth ............ sign-in (Google or email)
  ├─ Firestore ................ library, collections, extracted text
- ├─ Supabase Storage ......... direct upload with a single-use token
+ ├─ Vercel Blob .............. direct upload, authorized by /api/storage
  └─ /api (Vercel) ............ verifies the Firebase ID token on every call
      ├─ storage .............. issues upload tokens and short-lived download links
      ├─ extract-text ......... PDF (unpdf), DOCX (mammoth), TXT; Gemini OCR for scanned PDFs
@@ -61,7 +61,7 @@ Browser (PWA)
      └─ search-terms ......... terms for the OpenAlex search
 ```
 
-The Gemini key and the Supabase service key live only on the server. Each user has a daily AI call limit, and Gemini calls retry and fall back to other Flash models when one is overloaded.
+The Gemini key and the Blob token live only on the server. Each user has a daily AI call limit, and Gemini calls retry and fall back to other Flash models when one is overloaded.
 
 ## Getting started
 
@@ -88,10 +88,9 @@ npm run build
 4. **Project settings** → add a Web app and copy its values into the `VITE_FIREBASE_*` variables
 5. After deploying, add the app's domain under Authentication → Settings → Authorized domains
 
-### Supabase
-1. Create a project at [supabase.com](https://supabase.com) (Free plan)
-2. **SQL Editor** → run `supabase/setup.sql` to create the private `attachments` bucket
-3. **Project Settings → API** → copy the URL, the `anon` key and the `service_role` key
+### Vercel Blob
+1. In the Vercel project: **Storage → Create → Blob**, choose **Private** access and connect it to the project
+2. `BLOB_READ_WRITE_TOKEN` is added to the project automatically; copy it into `.env.local` for local development
 
 ### Gemini
 Create a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { get, put, del, list, issueSignedToken, presignUrl } from '@vercel/blob';
 
 export { Type, ThinkingLevel };
 
@@ -138,19 +138,39 @@ async function verifyFirebaseToken(token: string): Promise<string> {
   return payload.sub;
 }
 
-// Supabase Storage (anexos). A service role key fica só no servidor.
-export const ATTACHMENTS_BUCKET = 'attachments';
-let supabaseAdmin: SupabaseClient | null = null;
-export function getSupabaseAdmin(): SupabaseClient {
-  if (!supabaseAdmin) {
-    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) {
-      throw new Error('Armazenamento de anexos não configurado no servidor.');
-    }
-    supabaseAdmin = createClient(url, key, { auth: { persistSession: false } });
-  }
-  return supabaseAdmin;
+// Anexos no Vercel Blob (store privado). O token BLOB_READ_WRITE_TOKEN fica só no servidor.
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const ATTACHMENT_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+/** Grava um arquivo no store privado, no caminho exato (sem sufixo aleatório) */
+export async function putAttachment(path: string, body: Buffer | Uint8Array, contentType: string) {
+  await put(path, Buffer.from(body), { access: 'private', contentType, addRandomSuffix: false, allowOverwrite: true });
+}
+
+/** Link temporário (GET) para o navegador abrir um anexo privado */
+export async function signedAttachmentUrl(path: string, seconds = 60 * 60): Promise<string> {
+  const validUntil = Date.now() + seconds * 1000;
+  const token = await issueSignedToken({ pathname: path, operations: ['get'], validUntil });
+  const { presignedUrl } = await presignUrl(token, { operation: 'get', pathname: path, access: 'private', validUntil });
+  return presignedUrl;
+}
+
+/** Apaga todos os arquivos que começam com o prefixo */
+export async function deleteAttachmentPrefix(prefix: string) {
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix, cursor, limit: 1000 });
+    if (page.blobs.length) await del(page.blobs.map((b) => b.url));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+}
+
+export async function deleteAttachment(path: string) {
+  await del(path);
 }
 
 export function sendJson(res: any, status: number, data: unknown) {
@@ -214,9 +234,7 @@ export function isOwnPath(uid: string, path: unknown): path is string {
 }
 
 export async function downloadAttachment(path: string): Promise<Buffer> {
-  const { data, error } = await getSupabaseAdmin().storage.from(ATTACHMENTS_BUCKET).download(path);
-  if (error || !data) {
-    throw new Error('Arquivo não encontrado no armazenamento.');
-  }
-  return Buffer.from(await data.arrayBuffer());
+  const result = await get(path, { access: 'private' });
+  if (!result || !result.stream) throw new Error('Arquivo não encontrado no armazenamento.');
+  return Buffer.from(await new Response(result.stream).arrayBuffer());
 }

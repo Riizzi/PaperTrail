@@ -1,16 +1,20 @@
+import { upload } from '@vercel/blob/client';
 import { getAuthHeader } from './api';
+import { auth } from './firebase';
 
 /**
- * Anexos guardados no Supabase Storage (bucket privado "attachments").
- * O servidor (/api/storage) confere o login e gera um token de envio de uso único;
- * o arquivo vai direto do navegador para o Supabase, sem passar pela Vercel.
+ * Anexos guardados no Vercel Blob (store privado).
+ * O navegador envia o arquivo direto ao Blob; /api/storage confere o login e o caminho
+ * antes de liberar o envio. Para abrir, o servidor gera um link temporário assinado.
  */
 
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const BUCKET = 'attachments';
-
 export const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20 MB
+
+const MIME_BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain',
+};
 
 async function storageApi<T = any>(body: Record<string, unknown>): Promise<T> {
   const res = await fetch('/api/storage', {
@@ -32,6 +36,16 @@ async function storageApi<T = any>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+export function safeFileName(name: string): string {
+  return (
+    String(name || 'arquivo')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .slice(-120) || 'arquivo'
+  );
+}
+
 export async function uploadItemAttachment(
   itemId: string,
   file: File,
@@ -40,39 +54,28 @@ export async function uploadItemAttachment(
   if (file.size > MAX_ATTACHMENT_SIZE) {
     throw new Error('Arquivo excede o limite de 20 MB.');
   }
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error('Armazenamento de anexos não configurado.');
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Faça login para enviar arquivos.');
+
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  const contentType = MIME_BY_EXT[ext] || file.type;
+  if (!Object.values(MIME_BY_EXT).includes(contentType)) {
+    throw new Error('Formato não aceito. Use PDF, DOCX ou TXT.');
   }
 
-  const { path, token } = await storageApi<{ path: string; token: string }>({
-    action: 'upload-url',
-    itemId,
-    fileName: file.name,
-  });
-
-  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-  const url = `${SUPABASE_URL}/storage/v1/object/upload/sign/${BUCKET}/${encodedPath}?token=${encodeURIComponent(token)}`;
-
-  const form = new FormData();
-  form.append('cacheControl', '3600');
-  form.append('', file);
-
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url);
-    xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
-    // Chaves novas (sb_publishable_...) não são JWT e vão só no header apikey
-    if (!SUPABASE_ANON_KEY.startsWith('sb_')) {
-      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
-    }
-    xhr.setRequestHeader('x-upsert', 'false');
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Falha no envio do arquivo (${xhr.status}).`)));
-    xhr.onerror = () => reject(new Error('Falha de conexão ao enviar o arquivo.'));
-    xhr.send(form);
-  });
+  const path = `users/${uid}/items/${itemId}/${Date.now()}_${safeFileName(file.name)}`;
+  try {
+    await upload(path, file, {
+      access: 'private',
+      handleUploadUrl: '/api/storage',
+      headers: await getAuthHeader(),
+      contentType,
+      multipart: file.size > 5 * 1024 * 1024,
+      onUploadProgress: ({ percentage }) => onProgress?.(Math.round(percentage)),
+    });
+  } catch (err: any) {
+    throw new Error(`Falha no envio do arquivo${err?.message ? `: ${err.message}` : '.'}`);
+  }
 
   onProgress?.(100);
   return { storagePath: path };

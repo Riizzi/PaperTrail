@@ -11,7 +11,7 @@ Gerenciador de referências acadêmicas, mobile-first, inspirado no Zotero. Guar
 ![React](https://img.shields.io/badge/React_19-292524?logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-292524?logo=typescript&logoColor=3178C6)
 ![Firebase](https://img.shields.io/badge/Firebase-292524?logo=firebase&logoColor=FFCA28)
-![Supabase](https://img.shields.io/badge/Supabase-292524?logo=supabase&logoColor=3FCF8E)
+![Vercel Blob](https://img.shields.io/badge/Vercel%20Blob-292524?logo=vercel&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini_API-292524?logo=googlegemini&logoColor=8E75B2)
 ![Vercel](https://img.shields.io/badge/Vercel-292524?logo=vercel&logoColor=white)
 
@@ -38,7 +38,7 @@ Funciona como PWA: no iPhone (Safari → Compartilhar → Adicionar à Tela de I
 |---|---|
 | Interface | React 19, TypeScript, Vite, Tailwind CSS 4, PWA (vite-plugin-pwa) |
 | Login e dados | Firebase Authentication + Cloud Firestore (cache offline) |
-| Anexos | Supabase Storage (bucket privado, links assinados) |
+| Anexos | Vercel Blob (store privado, links assinados) |
 | IA | Gemini (`@google/genai`) com saída em JSON estruturado |
 | Servidor | Funções serverless da Vercel em `/api` |
 
@@ -50,7 +50,7 @@ Todos os serviços usados cabem nos planos gratuitos, sem cartão.
 Navegador (PWA)
  ├─ Firebase Auth ............ login (Google ou e-mail)
  ├─ Firestore ................ biblioteca, coleções, texto extraído
- ├─ Supabase Storage ......... envio direto do arquivo com token de uso único
+ ├─ Vercel Blob .............. envio direto do arquivo, liberado por /api/storage
  └─ /api (Vercel) ............ verifica o token do Firebase em toda chamada
      ├─ storage .............. gera tokens de envio e links temporários
      ├─ extract-text ......... PDF (unpdf), DOCX (mammoth), TXT; OCR via Gemini se o PDF for escaneado
@@ -59,7 +59,7 @@ Navegador (PWA)
      └─ search-terms ......... termos para a busca no OpenAlex
 ```
 
-A chave do Gemini e a chave de serviço do Supabase ficam só no servidor. Cada usuário tem um limite diário de chamadas de IA.
+A chave do Gemini e o token do Blob ficam só no servidor. Cada usuário tem um limite diário de chamadas de IA.
 
 ## Rodando localmente
 
@@ -86,10 +86,9 @@ npm run build
 4. **Configurações do projeto** → adicione um app Web e copie os valores para as variáveis `VITE_FIREBASE_*`
 5. Depois do deploy, adicione o domínio do app em Authentication → Settings → Authorized domains
 
-### Supabase
-1. Crie um projeto em [supabase.com](https://supabase.com) (plano Free)
-2. **SQL Editor** → rode `supabase/setup.sql` para criar o bucket privado `attachments`
-3. **Project Settings → API** → copie a URL, a `anon key` e a `service_role key`
+### Vercel Blob
+1. No projeto da Vercel: **Storage → Create → Blob**, escolha acesso **Private** e conecte ao projeto
+2. A variável `BLOB_READ_WRITE_TOKEN` é criada sozinha no projeto; copie para o `.env.local` para rodar local
 
 ### Gemini
 Gere a chave em [aistudio.google.com/apikey](https://aistudio.google.com/apikey).

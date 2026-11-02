@@ -319,7 +319,7 @@ export async function exportAllUserData(userId: string) {
 export async function deleteAllUserDataAndAccount(user: User): Promise<void> {
   const userId = user.uid;
 
-  // 1. Apagar os anexos no Supabase Storage (via servidor)
+  // 1. Apagar os anexos no Vercel Blob (via servidor)
   try {
     await deleteAllAttachments();
   } catch (storageErr) {
